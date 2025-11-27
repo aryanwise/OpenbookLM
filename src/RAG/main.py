@@ -28,4 +28,5 @@
 
 from rag_pipeline import RAGPipeline
 if __name__ == "__main__":
-    RAGPipeline()
+    rag_pipeline = RAGPipeline()
+    rag_pipeline.search()
