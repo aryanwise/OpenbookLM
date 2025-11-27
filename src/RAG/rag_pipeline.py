@@ -16,7 +16,7 @@ class RAGPipeline:
         store = FaissVectorStore("faiss_store")
         store.load()
         
-        # 
+    def search(self):
         rag_search = RAGsearch(llm_model="gemma3:4b")
         user_query = "What is supervised learning?"
         print(f"Querying: {user_query}...")
