@@ -12,22 +12,21 @@ from PyQt6.QtGui import QFont, QColor, QCursor, QIcon
 from PyQt6.QtCore import Qt, QSize, QTimer, QThread, pyqtSignal
 
 # ---------------------------------------------------------
-# CRITICAL FIX: Backend Import Logic (Matched to test.py)
+# PATH SETUP
 # ---------------------------------------------------------
-# 1. Resolve paths relative to this file
 current_file = Path(__file__).resolve()
 frontend_dir = current_file.parent  # src/frontend
 src_dir = frontend_dir.parent       # src
 rag_dir = src_dir / "RAG"           # src/RAG
 
-# 2. Add 'src/RAG' to sys.path so Python finds 'search', 'vectorstore', etc.
+# Add 'src/RAG' to sys.path
 sys.path.append(str(rag_dir))
 
-# 3. Define Data Directory
+# Define Data Directory
 DATA_DIR = src_dir / "data"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
-# 4. Import Backend Modules
+# Import Backend Modules
 try:
     from search import RAGsearch
     from vectorstore import FaissVectorStore
@@ -36,9 +35,10 @@ try:
 except ImportError as e:
     print(f"❌ CRITICAL ERROR: Could not import Backend modules. Details: {e}")
     sys.exit(1)
-# ---------------------------------------------------------
 
-# --- Stylesheet (NotebookLM Dark Theme) ---
+# ---------------------------------------------------------
+# STYLESHEET
+# ---------------------------------------------------------
 STYLESHEET = """
 QMainWindow { background-color: #131314; }
 QLabel { color: #E3E3E3; font-family: 'Segoe UI', sans-serif; }
@@ -71,7 +71,9 @@ QProgressBar { background: transparent; }
 QProgressBar::chunk { background-color: #8ab4f8; }
 """
 
-# --- Custom Widgets ---
+# ---------------------------------------------------------
+# CUSTOM WIDGETS
+# ---------------------------------------------------------
 class NotebookCard(QFrame):
     clicked = pyqtSignal(str) 
 
@@ -137,7 +139,9 @@ class CreateCard(QFrame):
         self.clicked.emit()
         super().mousePressEvent(event)
 
-# --- Workers ---
+# ---------------------------------------------------------
+# WORKER THREADS
+# ---------------------------------------------------------
 class SearchWorker(QThread):
     result_ready = pyqtSignal(str)
     def __init__(self, rag_engine, query):
@@ -153,16 +157,28 @@ class SearchWorker(QThread):
 
 class IndexingWorker(QThread):
     finished = pyqtSignal(str)
+    
     def run(self):
         try:
+            # 1. Load Documents
             loader = DocumentLoader(data_dir=str(DATA_DIR))
+            
+            # Check if any documents were actually found
+            if not loader.documents:
+                self.finished.emit("⚠️ No documents found to index.")
+                return
+
+            # 2. Build Store
             store = FaissVectorStore("faiss_store")
             store.build_from_documents(loader)
-            self.finished.emit("Done")
+            self.finished.emit("✅ Indexing Complete.")
+            
         except Exception as e:
-            self.finished.emit(f"Error: {e}")
+            self.finished.emit(f"❌ Indexing Failed: {e}")
 
-# --- Main Application ---
+# ---------------------------------------------------------
+# MAIN APP
+# ---------------------------------------------------------
 class MainApp(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -189,10 +205,13 @@ class MainApp(QMainWindow):
         QTimer.singleShot(100, self.init_backend)
 
     def init_backend(self):
+        # We wrap this in try/except so app doesn't crash on startup if empty
         try:
             self.rag_engine = RAGsearch(llm_model="gemma3:4b")
+            print("✅ RAG Engine Initialized.")
         except Exception as e:
-            print(f"Engine Init Warning: {e}")
+            print(f"⚠️ Engine Init Warning: {e}")
+            print("   (This is normal if no documents are indexed yet.)")
 
     # --- UI Construction ---
     def create_dashboard_ui(self):
@@ -326,29 +345,51 @@ class MainApp(QMainWindow):
 
     def on_create_notebook(self):
         self.open_notebook("New Project")
+        # Trigger upload immediately
         self.upload_file()
 
     def upload_file(self):
         fnames, _ = QFileDialog.getOpenFileNames(self, "Select Documents", "", "Documents (*.pdf *.txt *.docx)")
         if fnames:
+            copied_files = False
             for f in fnames:
-                shutil.copy(f, str(DATA_DIR))
+                src_path = Path(f)
+                dst_path = DATA_DIR / src_path.name
+                
+                # FIX: Check if file already exists in destination
+                if src_path.resolve() == dst_path.resolve():
+                    print(f"[INFO] Skipping copy: '{src_path.name}' is already in the data folder.")
+                    copied_files = True # Proceed to indexing anyway
+                    continue
+                
+                try:
+                    shutil.copy(f, str(DATA_DIR))
+                    copied_files = True
+                except shutil.SameFileError:
+                    # Double safety catch
+                    print(f"[INFO] SameFileError caught for {src_path.name}")
+                    copied_files = True
             
-            self.pbar.setVisible(True)
-            self.pbar.setRange(0,0)
-            self.append_system_msg("Structuring new sources...")
-            
-            self.worker = IndexingWorker()
-            self.worker.finished.connect(self.on_indexing_done)
-            self.worker.start()
+            if copied_files:
+                self.pbar.setVisible(True)
+                self.pbar.setRange(0,0)
+                self.append_system_msg("Structuring new sources... please wait.")
+                
+                self.worker = IndexingWorker()
+                self.worker.finished.connect(self.on_indexing_done)
+                self.worker.start()
 
     def on_indexing_done(self, msg):
         self.pbar.setVisible(False)
-        self.append_system_msg("Sources added. You can now chat.")
-        try:
-            self.rag_engine = RAGsearch(llm_model="gemma3:4b")
-        except:
-            pass
+        self.append_system_msg(msg)
+        
+        # Only re-init engine if indexing was successful
+        if "Failed" not in msg and "No documents" not in msg:
+            try:
+                self.rag_engine = RAGsearch(llm_model="gemma3:4b")
+                self.append_system_msg("Engine updated.")
+            except Exception as e:
+                self.append_system_msg(f"Engine update failed: {str(e)}")
 
     def send_message(self):
         text = self.input_field.text().strip()
@@ -358,7 +399,7 @@ class MainApp(QMainWindow):
         self.input_field.clear()
         
         if not self.rag_engine:
-            self.append_system_msg("⚠️ Backend not ready. Upload a file first.")
+            self.append_system_msg("⚠️ Backend not ready. Please upload a document first.")
             return
 
         self.pbar.setVisible(True)
