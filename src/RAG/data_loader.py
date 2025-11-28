@@ -47,9 +47,9 @@ class DocumentLoader:
                     
     def set_storage_location(self):
         """
-        Sets the root directory for the application (e.g., User/Documents/OpenbookLM).
+        Sets the root directory for the application (e.g., User/Documents/OpenbookLM-Projects).
         """
-        print("Please enter the system path where you want to save the 'OpenbookLM' folder.")
+        print("Please enter the system path where you want to save the 'OpenbookLM-Projects' folder.")
         print("(Example: C:/Users/Name/Documents or /home/user/docs)")
         
         user_input = str(input("Enter data location:\n> ")).strip()
