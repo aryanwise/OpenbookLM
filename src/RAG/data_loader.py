@@ -8,13 +8,10 @@ from langchain_community.document_loaders import JSONLoader
 
 class DocumentLoader:
 
-    def __init__(self, data_dir: str):
-        self.data_dir = Path(data_dir).resolve()
-        print(f"[DEBUG] Data path: {self.data_dir}")
-        self._load_documents()
+    def __init__(self):
         self.base_storage_path = None
 
-    def _load_documents(self):
+    def load_documents(self):
         self.documents = []
         # Mapping from file extensions to their respective loaders
         loader_map = {
