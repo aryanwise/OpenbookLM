@@ -6,41 +6,10 @@ from langchain_community.document_loaders import Docx2txtLoader
 from langchain_community.document_loaders.excel import UnstructuredExcelLoader
 from langchain_community.document_loaders import JSONLoader
 
-class DocumentLoader:
+class DocumentManager:
 
     def __init__(self):
         self.base_storage_path = None
-
-    def load_documents(self):
-        self.documents = []
-        # Mapping from file extensions to their respective loaders
-        loader_map = {
-            ".pdf": PyMuPDFLoader,
-            ".txt": TextLoader,
-            ".csv": CSVLoader,
-            ".docx": Docx2txtLoader,
-            ".xlsx": UnstructuredExcelLoader,
-            ".json": JSONLoader, # Assuming a simple JSONLoader, adjust if specific schema is needed
-        }
-
-        for ext, loader_class in loader_map.items():
-            for file_path in self.data_dir.glob(f'**/*{ext}'):
-                print(f"[DEBUG] Loading {ext} file: {file_path}")
-                try:
-                    # For JSONLoader, you might need to specify jq_schema, e.g., JSONLoader(file_path, jq_schema='.', text_content=False)
-                    # For now, assuming a generic initialization.
-                    if ext == ".json":
-                        loader = loader_class(str(file_path), jq_schema='.', text_content=False)
-                    else:
-                        loader = loader_class(str(file_path))
-                    
-                    loaded_docs = loader.load()
-                    print(f"[DEBUG] Loaded {len(loaded_docs)} documents from {file_path}")
-                    self.documents.extend(loaded_docs)
-                except Exception as e:
-                    print(f"[ERROR] Failed to load {file_path}: {e}")
-        if not self.documents:
-            print("[WARNING] No documents were loaded. Please check the 'data' directory and file types.")
                     
     def set_storage_location(self):
         """
@@ -90,6 +59,41 @@ class DocumentLoader:
         else:
             print(f"[INFO] Opening existing project at: {project_path}")
 
-        # Update the main data_dir to point to this specific project
-        # self.data_dir = Path(project_path)
-        # print(f"[READY] Active project directory set to: {self.data_dir}")
+    # TODO: UI for Drag and drop or Add documents function to store the docs inside the created project dir under parent dir (OpenbookLM-Projects)
+
+
+class DocumentLoader(DocumentManager):
+    def __init__(self):
+        pass
+    
+    # TODO: Read or Access all the files inside the current created project dir 
+    def load_documents(self):
+        self.documents = []
+        # Mapping from file extensions to their respective loaders
+        loader_map = {
+            ".pdf": PyMuPDFLoader,
+            ".txt": TextLoader,
+            ".csv": CSVLoader,
+            ".docx": Docx2txtLoader,
+            ".xlsx": UnstructuredExcelLoader,
+            ".json": JSONLoader, # Assuming a simple JSONLoader, adjust if specific schema is needed
+        }
+
+        for ext, loader_class in loader_map.items():
+            for file_path in self.data_dir.glob(f'**/*{ext}'):
+                print(f"[DEBUG] Loading {ext} file: {file_path}")
+                try:
+                    # For JSONLoader, you might need to specify jq_schema, e.g., JSONLoader(file_path, jq_schema='.', text_content=False)
+                    # For now, assuming a generic initialization.
+                    if ext == ".json":
+                        loader = loader_class(str(file_path), jq_schema='.', text_content=False)
+                    else:
+                        loader = loader_class(str(file_path))
+                    
+                    loaded_docs = loader.load()
+                    print(f"[DEBUG] Loaded {len(loaded_docs)} documents from {file_path}")
+                    self.documents.extend(loaded_docs)
+                except Exception as e:
+                    print(f"[ERROR] Failed to load {file_path}: {e}")
+        if not self.documents:
+            print("[WARNING] No documents were loaded. Please check the 'data' directory and file types.")
