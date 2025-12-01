@@ -154,18 +154,6 @@ class ExtractLink:
         docs = loader.load()
         return docs
 
-
-def save_txt(doc):
-    directory = Path(input("Enter Directory Path: "))
-    filename = str(input("Enter File Name: "))
-    full_path = directory / filename
-
-    # Ensure the directory exists
-    directory.mkdir(parents=True, exist_ok=True)
-
-    # Write data to the file
-    return full_path.write_text(doc)
-
 class ExtractText:
     # TODO: Copies user text and creates a .txt file to store the text 
     # Loads the document
