@@ -113,3 +113,18 @@ class DocumentLoader(DocumentManager):
         
         print(f"[SUMMARY] Total documents loaded: {len(self.documents)}")
         return self.documents
+    
+    # TODO: Function to load documents from Obsidian, Notion, etc -> MCP or Connectors 
+
+class ExtractLink:
+    # TODO: Implement link extraction logic -> Webbasedloader
+    pass
+
+class ExtractText:
+    # TODO: Copies user text and creates a .txt file to store the text 
+    # Loads the document
+    pass
+
+class ExtractTables:
+    # TODO: Load and work with csv or excel files
+    pass
