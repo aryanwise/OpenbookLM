@@ -63,13 +63,33 @@ class DocumentManager:
                     shutil.copy2(file_path, destination)
                     print(f"[SUCCESS] Added {file_name} to project.")
                 except Exception as e:
-                    print(f"[ERROR] Could not copy {file_name}: {e}")
+                    print(f"[ERROR] Could not copy {file_name}: {e}")    
+                    
+    def save_text_to_project(self, text_content: str, file_name: str):
+        """
+        Saves given text content to a .txt file in the current project directory.
+        """
+        if not self.current_project_path:
+            raise ValueError("No project selected.")
+        
+        if not file_name.endswith(".txt"):
+            file_name += ".txt"
+
+        destination_path = os.path.join(self.current_project_path, file_name)
+        try:
+            with open(destination_path, "w", encoding="utf-8") as f:
+                f.write(text_content)
+            print(f"[SUCCESS] Saved text to {file_name} in project.")
+        except Exception as e:
+            print(f"[ERROR] Could not save text to {file_name}: {e}")
+
 
     def get_project_files(self) -> List[str]:
         """Returns a list of filenames currently in the project folder."""
         if not self.current_project_path:
             return []
         return [f for f in os.listdir(self.current_project_path) if os.path.isfile(os.path.join(self.current_project_path, f))]
+
 
 
 class DocumentLoader(DocumentManager):
@@ -119,29 +139,23 @@ class DocumentLoader(DocumentManager):
     
     # TODO: Function to load documents from Obsidian, Notion, etc -> MCP or Connectors 
 
+
 class ExtractLink:
     # TODO: Implement diverse link extraction logic 
-    pass
+    def url_extraction(self, url):
+        """
+        Extracts html text using WebBaseLoader
+        """
+        # TODO: Save the file content and metadata inside current created project dir in .txt format
+        # TODO: Rename the files based on 'title' from metadata...if not title, then move to default
+        # TODO: Take list of urls as input that is seperated by new line or comma(,) -> Implement this in UI
+        loader = WebBaseLoader(url)
+        loader.requests_kwargs = {'verify':False}
+        docs = loader.load()
+        return docs
 
-def url_extraction(url):
-    """
-    Extracts html text using WebBaseLoader
-    """
-    # TODO: Save the file content and metadata inside current created project dir in .txt format
-    # TODO: Rename the files based on 'title' from metadata...if not title, then move to default
-    # TODO: Take list of urls as input that is seperated by new line or comma(,) -> Implement this in UI
-    loader = WebBaseLoader(url)
-    loader.requests_kwargs = {'verify':False}
-    docs = loader.load() 
-    return docs
-
-def extract_text(text: str):
-    # Extract multi line text from user input and prints it     
-    wrapped_text = textwrap.fill(text, width=100)
-    return wrapped_text
 
 def save_txt(doc):
-    
     directory = Path(input("Enter Directory Path: "))
     filename = str(input("Enter File Name: "))
     full_path = directory / filename
@@ -155,7 +169,10 @@ def save_txt(doc):
 class ExtractText:
     # TODO: Copies user text and creates a .txt file to store the text 
     # Loads the document
-    pass
+    def extract_text(self, text: str):
+        # Extract multi line text from user input and prints it     
+        wrapped_text = textwrap.fill(text, width=100)
+        return wrapped_text
 
 class ExtractTables:
     # TODO: Load and work with csv or excel files
