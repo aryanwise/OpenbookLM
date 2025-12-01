@@ -1,6 +1,5 @@
 import os
 import shutil
-import sys
 from pathlib import Path
 from typing import List, Any
 from langchain_community.document_loaders import (
@@ -19,6 +18,7 @@ class DocumentManager:
 
     def set_storage_location(self, path: str) -> bool:
         """Sets the root directory based on UI input."""
+        # TODO: This should be only done once
         if not os.path.exists(path):
             return False
 
@@ -133,14 +133,25 @@ def url_extraction(url):
     loader = WebBaseLoader(url)
     loader.requests_kwargs = {'verify':False}
     docs = loader.load() 
-    print(f"Document Content:\n{docs[0]}") 
-    print(f"\nDocument Metadata:\n{docs[0].metadata}")
+    return docs
 
 def extract_text(text: str):
     # Extract multi line text from user input and prints it     
     wrapped_text = textwrap.fill(text, width=100)
-    print(wrapped_text)
+    return wrapped_text
+
+def save_txt(doc):
     
+    directory = Path(input("Enter Directory Path: "))
+    filename = str(input("Enter File Name: "))
+    full_path = directory / filename
+
+    # Ensure the directory exists
+    directory.mkdir(parents=True, exist_ok=True)
+
+    # Write data to the file
+    return full_path.write_text(doc)
+
 class ExtractText:
     # TODO: Copies user text and creates a .txt file to store the text 
     # Loads the document
