@@ -4,9 +4,10 @@ from pathlib import Path
 from typing import List, Any
 from langchain_community.document_loaders import (
     PyPDFLoader, TextLoader, CSVLoader, PyMuPDFLoader,
-    Docx2txtLoader, JSONLoader
+    Docx2txtLoader, JSONLoader, WebBaseLoader
 )
 from langchain_community.document_loaders.excel import UnstructuredExcelLoader
+from bs4 import BeautifulSoup
 
 class DocumentManager:
     def __init__(self):
@@ -117,8 +118,21 @@ class DocumentLoader(DocumentManager):
     # TODO: Function to load documents from Obsidian, Notion, etc -> MCP or Connectors 
 
 class ExtractLink:
-    # TODO: Implement link extraction logic -> Webbasedloader
+    # TODO: Implement diverse link extraction logic 
     pass
+
+def url_extraction(url):
+    """
+    Extracts html text using WebBaseLoader
+    """
+    # TODO: Save the file content and metadata inside current created project dir in .txt format
+    # TODO: Rename the files based on 'title' from metadata...if not title, then move to default
+    # TODO: Take input for list of urls as input that is seperate by new line or comma(,) -> Implement this in UI
+    loader = WebBaseLoader(url)
+    loader.requests_kwargs = {'verify':False}
+    docs = loader.load() 
+    print(f"Document Content:\n{docs[0]}") 
+    print(f"\nDocument Metadata:\n{docs[0].metadata}")
 
 class ExtractText:
     # TODO: Copies user text and creates a .txt file to store the text 
