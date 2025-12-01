@@ -1,5 +1,6 @@
 import os
 import shutil
+import sys
 from pathlib import Path
 from typing import List, Any
 from langchain_community.document_loaders import (
@@ -8,6 +9,7 @@ from langchain_community.document_loaders import (
 )
 from langchain_community.document_loaders.excel import UnstructuredExcelLoader
 from bs4 import BeautifulSoup
+import textwrap
 
 class DocumentManager:
     def __init__(self):
@@ -127,13 +129,18 @@ def url_extraction(url):
     """
     # TODO: Save the file content and metadata inside current created project dir in .txt format
     # TODO: Rename the files based on 'title' from metadata...if not title, then move to default
-    # TODO: Take input for list of urls as input that is seperate by new line or comma(,) -> Implement this in UI
+    # TODO: Take list of urls as input that is seperated by new line or comma(,) -> Implement this in UI
     loader = WebBaseLoader(url)
     loader.requests_kwargs = {'verify':False}
     docs = loader.load() 
     print(f"Document Content:\n{docs[0]}") 
     print(f"\nDocument Metadata:\n{docs[0].metadata}")
 
+def extract_text(text: str):
+    # Extract multi line text from user input and prints it     
+    wrapped_text = textwrap.fill(text, width=100)
+    print(wrapped_text)
+    
 class ExtractText:
     # TODO: Copies user text and creates a .txt file to store the text 
     # Loads the document
@@ -141,4 +148,4 @@ class ExtractText:
 
 class ExtractTables:
     # TODO: Load and work with csv or excel files
-    pass
+    pass 
