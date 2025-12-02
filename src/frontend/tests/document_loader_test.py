@@ -1,204 +1,197 @@
 import sys
 import os
-from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
-                             QHBoxLayout, QLabel, QLineEdit, QPushButton, 
-                             QFileDialog, QListWidget, QTextEdit, QMessageBox, QGroupBox)
-from PyQt6.QtCore import Qt
-# import data loader 
+from PyQt6.QtWidgets import (
+    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
+    QLabel, QLineEdit, QPushButton, QFileDialog, QGroupBox, QFrame, 
+    QGridLayout, QDialog, QProgressBar, QMessageBox
+)
+from PyQt6.QtCore import Qt, QSize
+from PyQt6.QtGui import QCursor
+
+# Adjust import path as needed
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'RAG')))
-from data_loader import DocumentLoader
+from data_loader import DocumentLoader, ExtractLink, ExtractText
 
-class FileDropList(QListWidget):
-    """Custom ListWidget to handle Drag and Drop of files."""
-    def __init__(self, parent=None):
+# --- Reusing Custom Widgets (DropZone, ActionCard, Dialogs) from previous response ---
+# (Copy DropZone, ActionCard, URLDialog, TextPasteDialog classes here)
+# For the sake of space, I am pasting the abbreviated DropZone to ensure the code runs.
+
+class DropZone(QLabel):
+    def __init__(self, parent=None, main_window=None):
         super().__init__(parent)
+        self.main_window = main_window
         self.setAcceptDrops(True)
-        self.main_window = None 
+        self.setText("⬆\n\nUpload sources\nDrag & drop or choose file to upload")
+        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.setObjectName("DropZone")
+    
+    def dragEnterEvent(self, e): e.accept() if e.mimeData().hasUrls() else e.ignore()
+    def dragMoveEvent(self, e): e.accept() if e.mimeData().hasUrls() else e.ignore()
+    def dropEvent(self, e):
+        if e.mimeData().hasUrls():
+            files = [str(u.toLocalFile()) for u in e.mimeData().urls() if u.isLocalFile()]
+            if self.main_window: self.main_window.process_files(files)
+    def mousePressEvent(self, e): 
+        if self.main_window: self.main_window.open_file_dialog()
 
-    def dragEnterEvent(self, event):
-        if event.mimeData().hasUrls():
-            event.accept()
-        else:
-            event.ignore()
+class ActionCard(QFrame):
+    def __init__(self, title, subtitle, icon_text, callback):
+        super().__init__()
+        self.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+        self.mousePressEvent = lambda e: callback()
+        self.setObjectName("ActionCard")
+        layout = QVBoxLayout(self)
+        layout.addWidget(QLabel(icon_text))
+        layout.addWidget(QLabel(title))
+        layout.addWidget(QLabel(subtitle))
 
-    def dragMoveEvent(self, event):
-        # CRITICAL FIX: You must accept the move event, 
-        # otherwise the cursor remains a "prohibited" sign.
-        if event.mimeData().hasUrls():
-            event.setDropAction(Qt.DropAction.CopyAction)
-            event.accept()
-        else:
-            event.ignore()
+# --- Main Window ---
 
-    def dropEvent(self, event):
-        if event.mimeData().hasUrls():
-            event.setDropAction(Qt.DropAction.CopyAction)
-            event.accept()
-            
-            # Extract local file paths
-            files = []
-            for url in event.mimeData().urls():
-                if url.isLocalFile():
-                    files.append(str(url.toLocalFile()))
-            
-            if self.main_window:
-                self.main_window.process_dropped_files(files)
-        else:
-            event.ignore()
-
-class MainWindow(QMainWindow):
+class ModernLoaderWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.backend = DocumentLoader()
+        self.link_extractor = ExtractLink()
+        
         self.setWindowTitle("OpenbookLM Data Loader")
-        self.resize(800, 600)
+        self.resize(1000, 750)
+        # Dark Theme
+        self.setStyleSheet("""
+            QMainWindow { background-color: #202124; }
+            QLabel { color: #e8eaed; }
+            QLineEdit { background-color: #303134; color: white; border: 1px solid #5f6368; border-radius: 4px; padding: 8px; }
+            QPushButton { background-color: #8ab4f8; color: #202124; border-radius: 4px; padding: 6px 12px; font-weight: bold; }
+            QPushButton#SecondaryBtn { background-color: transparent; color: #8ab4f8; border: 1px solid #5f6368; }
+            #DropZone { border: 1px dashed #5f6368; background-color: #202124; color: #bdc1c6; border-radius: 12px; font-size: 16px; }
+            #ActionCard { background-color: #303134; border: 1px solid #5f6368; border-radius: 8px; }
+            #ActionCard:hover { background-color: #3c4043; border-color: #a8c7fa; }
+        """)
+
         self.init_ui()
+        self.check_initial_config()
 
     def init_ui(self):
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
         main_layout = QVBoxLayout(central_widget)
+        main_layout.setContentsMargins(40, 20, 40, 40)
+        main_layout.setSpacing(20)
 
-        # --- Section 1: Storage Configuration ---
-        config_group = QGroupBox("1. Configuration")
-        config_layout = QVBoxLayout()
+        # 1. Top Bar: Root Config
+        top_bar = QHBoxLayout()
+        self.root_label = QLabel("Root: Not Set")
+        self.root_label.setStyleSheet("color: #bdc1c6; font-size: 12px; font-style: italic;")
         
-        path_layout = QHBoxLayout()
-        self.path_input = QLineEdit()
-        self.path_input.setPlaceholderText("Select Root Storage Location...")
-        self.path_input.setReadOnly(True)
-        browse_btn = QPushButton("Browse")
-        browse_btn.clicked.connect(self.browse_folder)
+        self.change_root_btn = QPushButton("⚙ Change Root")
+        self.change_root_btn.setObjectName("SecondaryBtn")
+        self.change_root_btn.setFixedSize(120, 30)
+        self.change_root_btn.clicked.connect(self.select_root_folder)
         
-        path_layout.addWidget(self.path_input)
-        path_layout.addWidget(browse_btn)
+        top_bar.addWidget(self.root_label)
+        top_bar.addStretch()
+        top_bar.addWidget(self.change_root_btn)
+        main_layout.addLayout(top_bar)
+
+        # 2. Project Selection Header
+        header_layout = QHBoxLayout()
+        title = QLabel("Project:")
+        title.setStyleSheet("font-size: 24px; font-weight: bold;")
         
-        project_layout = QHBoxLayout()
         self.project_input = QLineEdit()
-        self.project_input.setPlaceholderText("Enter Project Name (e.g., Physics)")
-        create_proj_btn = QPushButton("Create/Load Project")
-        create_proj_btn.clicked.connect(self.setup_project)
-
-        project_layout.addWidget(self.project_input)
-        project_layout.addWidget(create_proj_btn)
-
-        config_layout.addLayout(path_layout)
-        config_layout.addLayout(project_layout)
-        config_group.setLayout(config_layout)
-        main_layout.addWidget(config_group)
-
-        # --- Section 2: File Management (Drag & Drop) ---
-        file_group = QGroupBox("2. Project Files (Drag & Drop Here)")
-        file_layout = QVBoxLayout()
+        self.project_input.setPlaceholderText("Enter Project Name (e.g. Physics_101)")
+        self.project_input.setFixedWidth(300)
+        # Pressing Enter triggers project creation
+        self.project_input.returnPressed.connect(self.setup_project)
         
-        self.file_list = FileDropList()
-        self.file_list.main_window = self # Link back to controller
+        self.create_btn = QPushButton("Create/Open")
+        self.create_btn.clicked.connect(self.setup_project)
         
-        btn_layout = QHBoxLayout()
-        add_file_btn = QPushButton("Add Files via Dialog")
-        add_file_btn.clicked.connect(self.open_file_dialog)
-        load_docs_btn = QPushButton("3. Process/Load Documents")
-        load_docs_btn.setStyleSheet("background-color: #4CAF50; color: white; font-weight: bold;")
-        load_docs_btn.clicked.connect(self.run_loader)
+        header_layout.addWidget(title)
+        header_layout.addWidget(self.project_input)
+        header_layout.addWidget(self.create_btn)
+        header_layout.addStretch()
+        
+        main_layout.addLayout(header_layout)
 
-        btn_layout.addWidget(add_file_btn)
-        btn_layout.addWidget(load_docs_btn)
+        # 3. Drop Zone
+        self.drop_zone = DropZone(main_window=self)
+        self.drop_zone.setFixedHeight(220)
+        main_layout.addWidget(self.drop_zone)
 
-        file_layout.addWidget(self.file_list)
-        file_layout.addLayout(btn_layout)
-        file_group.setLayout(file_layout)
-        main_layout.addWidget(file_group)
+        # 4. Action Cards
+        grid_layout = QHBoxLayout()
+        self.link_card = ActionCard("Link", "Website", "🔗", self.dummy_link) # Replace with real dialog
+        self.paste_card = ActionCard("Paste text", "Copied text", "📋", self.dummy_paste) # Replace with real dialog
+        grid_layout.addWidget(self.link_card)
+        grid_layout.addWidget(self.paste_card)
+        main_layout.addLayout(grid_layout)
+        
+        # 5. Source Limit / Status
+        self.status_label = QLabel("0 Sources")
+        main_layout.addWidget(self.status_label)
 
-        # --- Section 3: Logs ---
-        log_group = QGroupBox("Logs")
-        log_layout = QVBoxLayout()
-        self.log_output = QTextEdit()
-        self.log_output.setReadOnly(True)
-        log_layout.addWidget(self.log_output)
-        log_group.setLayout(log_layout)
-        main_layout.addWidget(log_group)
+        # Disable main UI initially
+        self.toggle_main_ui(False)
 
-        # Initial State
-        self.toggle_project_controls(False)
+    def check_initial_config(self):
+        """Checks if backend has a saved path on startup."""
+        if self.backend.base_storage_path:
+            self.root_label.setText(f"Root: {self.backend.base_storage_path}")
+            self.project_input.setEnabled(True)
+            self.create_btn.setEnabled(True)
+        else:
+            self.root_label.setText("Root: Not Set (Please Select)")
+            # Force user to select
+            QMessageBox.information(self, "Welcome", "Please select a Main Directory where all projects will be stored.")
+            self.select_root_folder()
 
-    def log(self, message):
-        self.log_output.append(message)
-
-    def toggle_project_controls(self, enable):
-        self.file_list.setEnabled(enable)
-        # We assume controls are disabled until a project is successfully created/loaded
-
-    # --- Handlers ---
-
-    def browse_folder(self):
-        folder = QFileDialog.getExistingDirectory(self, "Select Root Storage Folder")
+    def select_root_folder(self):
+        folder = QFileDialog.getExistingDirectory(self, "Select Main Storage Folder")
         if folder:
-            self.path_input.setText(folder)
             success = self.backend.set_storage_location(folder)
             if success:
-                self.log(f"Storage set to: {folder}")
-            else:
-                self.log("Error setting storage path.")
+                self.root_label.setText(f"Root: {self.backend.base_storage_path}")
+                self.project_input.setEnabled(True)
+                self.create_btn.setEnabled(True)
+                QMessageBox.information(self, "Success", "Main directory set! Now create a project.")
 
     def setup_project(self):
-        base_path = self.path_input.text()
+        if not self.backend.base_storage_path:
+            self.select_root_folder()
+            return
+
         proj_name = self.project_input.text()
-        
-        if not base_path or not proj_name:
-            QMessageBox.warning(self, "Input Error", "Please set storage path and project name.")
-            return
+        if not proj_name: return
 
         try:
-            # Ensure base path is set in backend
-            self.backend.set_storage_location(base_path)
             path = self.backend.create_load_project(proj_name)
-            self.log(f"Project active at: {path}")
-            self.toggle_project_controls(True)
-            self.refresh_file_list()
+            self.toggle_main_ui(True)
+            self.update_file_count()
+            self.status_label.setText(f"Active Project: {proj_name}")
         except Exception as e:
-            self.log(f"Error creating project: {e}")
+            QMessageBox.critical(self, "Error", str(e))
 
-    def process_dropped_files(self, file_paths):
-        if not self.backend.current_project_path:
-            QMessageBox.warning(self, "Error", "Please create/load a project first.")
-            return
-        
-        self.backend.add_files_to_project(file_paths)
-        self.log(f"Added {len(file_paths)} files via Drag & Drop.")
-        self.refresh_file_list()
+    def toggle_main_ui(self, enable):
+        self.drop_zone.setVisible(enable)
+        self.link_card.setVisible(enable)
+        self.paste_card.setVisible(enable)
 
+    def process_files(self, files):
+        self.backend.add_files_to_project(files)
+        self.update_file_count()
+
+    def update_file_count(self):
+        count = len(self.backend.get_project_files())
+        self.status_label.setText(f"Sources: {count}")
+    
+    def dummy_link(self): print("Link dialog here")
+    def dummy_paste(self): print("Paste dialog here")
     def open_file_dialog(self):
-        if not self.backend.current_project_path:
-            QMessageBox.warning(self, "Error", "Please create/load a project first.")
-            return
-
-        files, _ = QFileDialog.getOpenFileNames(self, "Select Documents")
-        if files:
-            self.backend.add_files_to_project(files)
-            self.log(f"Added {len(files)} files via Dialog.")
-            self.refresh_file_list()
-
-    def refresh_file_list(self):
-        self.file_list.clear()
-        files = self.backend.get_project_files()
-        self.file_list.addItems(files)
-
-    def run_loader(self):
-        if not self.backend.current_project_path:
-            return
-        
-        self.log("--- Starting Document Loading ---")
-        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
-        try:
-            docs = self.backend.load_documents()
-            self.log(f"Process Complete. Loaded {len(docs)} document chunks.")
-        except Exception as e:
-            self.log(f"Critical Error during loading: {e}")
-        finally:
-            QApplication.restoreOverrideCursor()
+        files, _ = QFileDialog.getOpenFileNames(self)
+        if files: self.process_files(files)
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    window = MainWindow()
+    window = ModernLoaderWindow()
     window.show()
     sys.exit(app.exec())
