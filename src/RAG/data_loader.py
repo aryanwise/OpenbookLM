@@ -1,5 +1,6 @@
 import os
 import shutil
+import json
 from pathlib import Path
 from typing import List, Any
 from langchain_community.document_loaders import (
@@ -10,41 +11,63 @@ from langchain_community.document_loaders.excel import UnstructuredExcelLoader
 from bs4 import BeautifulSoup
 import textwrap
 
+CONFIG_FILE = "config.json"
+
 class DocumentManager:
     def __init__(self):
         self.base_storage_path = None
         self.current_project_path = None
         self.current_project_name = None
+        self.load_config()
+
+    def load_config(self):
+        """Checks if a root path was previously saved."""
+        if os.path.exists(CONFIG_FILE):
+            try:
+                with open(CONFIG_FILE, 'r') as f:
+                    data = json.load(f)
+                    self.base_storage_path = data.get("root_path")
+                    if self.base_storage_path and not os.path.exists(self.base_storage_path):
+                        # Handle case where folder was deleted manually
+                        self.base_storage_path = None
+            except Exception as e:
+                print(f"[ERROR] Could not load config: {e}")
+
+    def save_config(self):
+        """Saves the current root path to a file."""
+        if self.base_storage_path:
+            try:
+                with open(CONFIG_FILE, 'w') as f:
+                    json.dump({"root_path": self.base_storage_path}, f)
+            except Exception as e:
+                print(f"[ERROR] Could not save config: {e}")
 
     def set_storage_location(self, path: str) -> bool:
-        """Sets the root directory based on UI input."""
-        # TODO: This should be only done once
+        """Sets the root directory and saves it for future use."""
         if not os.path.exists(path):
             return False
 
+        # Create the main container folder inside the selected path
         self.base_storage_path = os.path.join(path, "OpenbookLM-Projects")
         
         if not os.path.exists(self.base_storage_path):
             os.makedirs(self.base_storage_path)
-            print(f"[SUCCESS] Created root folder at: {self.base_storage_path}")
-        else:
-            print(f"[INFO] Found existing root folder at: {self.base_storage_path}")
         
+        self.save_config() 
         return True
-
+    
     def create_load_project(self, project_name: str) -> str:
-        """Creates or loads a project subdirectory."""
+        """Creates or loads a project subdirectory inside the established root."""
         if not self.base_storage_path:
-            raise ValueError("Base storage path not set.")
+            raise ValueError("Root storage path not set. Please configure settings.")
 
         self.current_project_name = project_name.strip()
+        # All future projects go here automatically
         self.current_project_path = os.path.join(self.base_storage_path, self.current_project_name)
 
         if not os.path.exists(self.current_project_path):
             os.makedirs(self.current_project_path)
-            print(f"[SUCCESS] Project '{project_name}' created at: {self.current_project_path}")
-        else:
-            print(f"[INFO] Opening existing project at: {self.current_project_path}")
+            print(f"[SUCCESS] Project created at: {self.current_project_path}")
         
         return self.current_project_path
 
@@ -86,8 +109,7 @@ class DocumentManager:
 
     def get_project_files(self) -> List[str]:
         """Returns a list of filenames currently in the project folder."""
-        if not self.current_project_path:
-            return []
+        if not self.current_project_path: return []
         return [f for f in os.listdir(self.current_project_path) if os.path.isfile(os.path.join(self.current_project_path, f))]
 
 
@@ -103,7 +125,7 @@ class DocumentLoader(DocumentManager):
         """
         if not self.current_project_path:
             print("[ERROR] No project directory set.")
-            return
+            return []
 
         self.documents = []
         path_obj = Path(self.current_project_path)
@@ -136,6 +158,27 @@ class DocumentLoader(DocumentManager):
         
         print(f"[SUMMARY] Total documents loaded: {len(self.documents)}")
         return self.documents
+    
+    def process_and_save_link(self, url: str):
+        """Extracts content from URL and saves it to the project."""
+        try:
+            loader = WebBaseLoader(url)
+            loader.requests_kwargs = {'verify': False}
+            docs = loader.load()
+            
+            if not docs: return False
+            
+            # Use page title or URL as filename
+            title = docs[0].metadata.get('title', 'website_content')
+            if not title: title = url.split("//")[-1].split("/")[0]
+            
+            content = "\n\n".join([d.page_content for d in docs])
+            content = f"Source: {url}\n\n{content}"
+            
+            return self.save_text_to_project(content, title)
+        except Exception as e:
+            print(f"Link processing error: {e}")
+            return False
     
     # TODO: Function to load documents from Obsidian, Notion, etc -> MCP or Connectors 
 
