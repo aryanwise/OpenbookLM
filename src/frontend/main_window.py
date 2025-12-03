@@ -6,10 +6,11 @@ from PyQt6.QtWidgets import (
     QLabel, QGridLayout, QFrame, QScrollArea, QInputDialog, QMessageBox,
     QPushButton, QFileDialog
 )
-from PyQt6.QtCore import Qt, pyqtSignal, QSize, QTimer  # <--- Added QTimer
-from PyQt6.QtGui import QIcon, QCursor, QFont
+from PyQt6.QtCore import Qt, pyqtSignal, QTimer
+from PyQt6.QtGui import QCursor
+from frontend.workspace_window import WorkspaceWindow
 
-# Import Styles
+# --- 1. Import Styles ---
 try:
     from frontend.styles import (
         DASHBOARD_STYLE, SECTION_TITLE_STYLE, NOTEBOOK_CARD_STYLE, 
@@ -21,10 +22,10 @@ except ImportError:
         NEW_NOTEBOOK_CARD_STYLE, CARD_TITLE_STYLE, CARD_SUBTITLE_STYLE
     )
 
-# Backend Import
+# --- 2. Import Backend ---
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'RAG')))
 try:
-    from data_loader import DocumentLoader
+    from data_loader import DocumentLoader  # This inherits from DocumentManager
 except ImportError:
     from data_loader import DocumentLoader
 
@@ -38,7 +39,7 @@ class NotebookCard(QFrame):
         self.setFixedSize(280, 180)
         self.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
         
-        # Assign Object Name FIRST before styling
+        # Set ObjectName BEFORE styling to avoid parsing errors
         if is_new:
             self.setObjectName("NewNotebookCard")
             self.setStyleSheet(NEW_NOTEBOOK_CARD_STYLE)
@@ -81,6 +82,7 @@ class NotebookCard(QFrame):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
+        # Initialize Backend (This loads config.json automatically via DocumentManager)
         self.backend = DocumentLoader() 
         
         self.setWindowTitle("OpenbookLM")
@@ -89,11 +91,11 @@ class MainWindow(QMainWindow):
         
         self.init_ui()
         
-        # --- UX FIX: Delay the check until the window is visible ---
-        # 100ms delay ensures the UI is painted before the popup appears
+        # Delay startup check slightly so UI renders first
         QTimer.singleShot(100, self.check_initial_setup)
 
     def init_ui(self):
+        # Scroll Area Setup
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         self.setCentralWidget(scroll)
@@ -105,7 +107,7 @@ class MainWindow(QMainWindow):
         self.main_layout.setContentsMargins(60, 40, 60, 40)
         self.main_layout.setSpacing(30)
         
-        # Header
+        # --- Header ---
         header_layout = QHBoxLayout()
         logo = QLabel("OpenbookLM")
         logo.setStyleSheet("font-size: 26px; font-weight: bold; color: white;")
@@ -129,7 +131,7 @@ class MainWindow(QMainWindow):
         
         self.main_layout.addLayout(header_layout)
 
-        # Featured Section
+        # --- Featured Section (Static) ---
         self.add_section_title("Featured notebooks")
         featured_layout = QHBoxLayout()
         featured_layout.setSpacing(20)
@@ -145,7 +147,7 @@ class MainWindow(QMainWindow):
         
         self.main_layout.addLayout(featured_layout)
 
-        # Recent Section
+        # --- Recent Section (Dynamic) ---
         self.add_section_title("Recent Openbooks")
         self.recent_grid = QGridLayout()
         self.recent_grid.setSpacing(20)
@@ -157,42 +159,44 @@ class MainWindow(QMainWindow):
         lbl.setStyleSheet(SECTION_TITLE_STYLE)
         self.main_layout.addWidget(lbl)
 
-    # --- Logic ---
+    # --- Backend Connection Logic ---
 
     def check_initial_setup(self):
-        """Runs shortly after startup. Checks if we have a valid root folder."""
-        # 1. Check if backend has a path
+        """
+        Uses DocumentManager logic:
+        If base_storage_path is set (loaded from config), load notebooks.
+        If not, prompt the user to select one.
+        """
         if self.backend.base_storage_path and os.path.exists(self.backend.base_storage_path):
             self.load_notebooks()
         else:
-            # 2. Show Explanation Pop-up FIRST
             QMessageBox.information(
                 self, 
-                "Welcome to OpenbookLM", 
-                "To get started, please select a folder where all your notebooks will be stored."
+                "Welcome", 
+                "Please select a folder to store your OpenbookLM projects."
             )
-            # 3. THEN open the file dialog
             self.change_root_directory(initial=True)
 
     def change_root_directory(self, initial=False):
-        """Opens dialog to select root folder."""
-        msg = "Select Storage Folder"
-        folder = QFileDialog.getExistingDirectory(self, msg)
+        """Calls backend.set_storage_location"""
+        folder = QFileDialog.getExistingDirectory(self, "Select Storage Folder")
         
         if folder:
+            # Backend logic: Sets path and saves to config.json
             success = self.backend.set_storage_location(folder)
             if success:
                 self.load_notebooks()
             else:
-                QMessageBox.warning(self, "Error", "Could not set storage location.")
+                QMessageBox.warning(self, "Error", "Invalid folder selected.")
         elif initial:
-            # If they cancel the initial setup, we can't really proceed.
-            # You might want to close the app or just leave it empty.
-            QMessageBox.warning(self, "Setup Incomplete", "A storage folder is required to save your notebooks.")
+            QMessageBox.warning(self, "Required", "A storage folder is required.")
 
     def load_notebooks(self):
-        """Scans the root directory and populates the grid."""
-        # Clear existing items
+        """
+        Reads folders from backend.base_storage_path.
+        This is purely UI logic reading the state established by DocumentManager.
+        """
+        # Clear Grid
         for i in reversed(range(self.recent_grid.count())): 
             widget = self.recent_grid.itemAt(i).widget()
             if widget: widget.setParent(None)
@@ -201,6 +205,7 @@ class MainWindow(QMainWindow):
 
         try:
             root = self.backend.base_storage_path
+            # List directories only
             projects = [d for d in os.listdir(root) if os.path.isdir(os.path.join(root, d))]
             
             row, col = 0, 0
@@ -208,6 +213,7 @@ class MainWindow(QMainWindow):
             emojis = ["📘", "📙", "📒", "📕", "📓", "🧠", "💡"]
 
             for proj in projects:
+                # Metadata: Count files in the project folder
                 proj_path = os.path.join(root, proj)
                 file_count = len([f for f in os.listdir(proj_path) if os.path.isfile(os.path.join(proj_path, f))])
                 
@@ -225,22 +231,38 @@ class MainWindow(QMainWindow):
             print(f"Error loading notebooks: {e}")
 
     def prompt_create_notebook(self):
+        """Calls backend.create_load_project"""
         if not self.backend.base_storage_path:
-             QMessageBox.warning(self, "Error", "Please configure a storage folder first.")
+             QMessageBox.warning(self, "Error", "Please set a storage folder first.")
              return
 
         name, ok = QInputDialog.getText(self, 'Create New', 'Notebook Title:')
         if ok and name:
             try:
+                # Backend Logic: Creates folder
                 self.backend.create_load_project(name)
+                # UI Logic: Refresh view and open
                 self.load_notebooks() 
                 self.open_notebook(name) 
             except Exception as e:
                 QMessageBox.warning(self, "Error", str(e))
 
     def open_notebook(self, name):
+        """
+        Triggered when a card is clicked.
+        Opens the Workspace Window and closes/hides the Dashboard.
+        """
+        # 1. Ensure backend points to correct folder
         self.backend.create_load_project(name) 
-        QMessageBox.information(self, "Open Project", f"Opening: {name}\nPath: {self.backend.current_project_path}")
+        
+        # 2. Open Workspace Window
+        # We pass the backend instance so it keeps the same settings/paths
+        self.workspace = WorkspaceWindow(name, self.backend)
+        self.workspace.show()
+        
+        # 3. Close Dashboard (or self.hide() if you want to go back later)
+        self.close()
+        # TODO: Here you will initialize and show the ModernLoaderWindow (the UI from previous steps)
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
