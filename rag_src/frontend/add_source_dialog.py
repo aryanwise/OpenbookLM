@@ -199,14 +199,18 @@ class SourceUploadDialog(QDialog):
         grid_layout = QHBoxLayout()
         grid_layout.setSpacing(20)
 
-        # Group 1: Google (Placeholder)
-        drive_btn = SourceChip("📂", "Google Drive", lambda: print("Drive Todo"))
-        group_drive = SourceGroup("Google Workspace", "G", [drive_btn])
+        # Group 1: MCP/Connectors
+        # TODO: Connect different types of document management tool 
+        # Example: Notion, Obsidion, Goodnotes, Googledrive, Etc
+        drive_btn = SourceChip("📂", "TO DO", lambda: print("Drive Todo"))
+        group_drive = SourceGroup("Connectors", "G", [drive_btn])
         
         # Group 2: Link
         web_btn = SourceChip("🌐", "Website", self.open_link)
-        yt_btn = SourceChip("▶️", "YouTube", self.open_link) # Can reuse logic or add specific Youtube logic
-        group_link = SourceGroup("Link", "🔗", [web_btn, yt_btn])
+        # TODO: Implement youtube api or 3rd party api to access youtube videos
+        # yt_btn = SourceChip("▶️", "YouTube", self.open_link) # Can reuse logic or add specific Youtube logic
+        # group_link = SourceGroup("Link", "🔗", [web_btn, yt_btn])
+        group_link = SourceGroup("Link", "🔗", [web_btn])
 
         # Group 3: Text
         paste_btn = SourceChip("📋", "Copied text", self.open_paste)
