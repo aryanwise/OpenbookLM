@@ -97,6 +97,37 @@ class DocumentManager:
         return [f for f in os.listdir(self.current_project_path) 
                 if os.path.isfile(os.path.join(self.current_project_path, f))]
 
+    def delete_project(self, project_name: str):
+        if not self.base_storage_path: return
+        path = os.path.join(self.base_storage_path, project_name)
+        if os.path.exists(path):
+            shutil.rmtree(path) # CAUTION: Deletes folder and contents
+            print(f"Deleted project: {project_name}")
+
+    def rename_project(self, old_name: str, new_name: str):
+        if not self.base_storage_path: return
+        old_path = os.path.join(self.base_storage_path, old_name)
+        new_path = os.path.join(self.base_storage_path, new_name)
+        if os.path.exists(old_path) and not os.path.exists(new_path):
+            os.rename(old_path, new_path)
+
+    def delete_source_file(self, filename: str):
+        if not self.current_project_path: return
+        path = os.path.join(self.current_project_path, filename)
+        if os.path.exists(path):
+            os.remove(path)
+
+    def rename_source_file(self, old_name: str, new_name: str):
+        if not self.current_project_path: return
+        old_path = os.path.join(self.current_project_path, old_name)
+        # Ensure extension is kept or handled
+        if "." in old_name and "." not in new_name:
+            ext = old_name.split(".")[-1]
+            new_name = f"{new_name}.{ext}"
+            
+        new_path = os.path.join(self.current_project_path, new_name)
+        if os.path.exists(old_path):
+            os.rename(old_path, new_path)
 
 
 class DocumentLoader(DocumentManager):
