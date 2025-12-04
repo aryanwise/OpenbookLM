@@ -1,134 +1,81 @@
 # frontend/styles.py
 
-DARK_THEME = """
-    QMainWindow { background-color: transparent; }
-    
-    QWidget#CentralWidget { 
-        background-color: rgba(32, 33, 36, 245); 
-        border-radius: 16px; 
-        border: 1px solid #5f6368;
-    }
+# Global Colors
+BG_DARK = "rgba(19, 19, 20, 245)"       # Deep dark, slightly transparent
+BG_PANEL = "rgba(30, 31, 32, 200)"      # Lighter panels
+ACCENT_BLUE = "#a8c7fa"
+TEXT_PRIMARY = "#e8eaed"
+TEXT_SECONDARY = "#bdc1c6"
+BORDER_COLOR = "rgba(95, 99, 104, 150)"
 
-    QLabel { color: #e8eaed; font-family: 'Segoe UI', sans-serif; }
-    
-    QLineEdit, QTextEdit { 
-        background-color: #202124; 
-        color: white; 
-        border: 1px solid #5f6368; 
-        border-radius: 8px; 
-        padding: 10px; 
-        font-size: 14px;
-    }
-    
-    QLineEdit:focus, QTextEdit:focus {
-        border: 1px solid #8ab4f8;
-    }
-
-    QPushButton { 
-        background-color: #8ab4f8; 
-        color: #202124; 
-        border-radius: 18px; 
-        padding: 8px 20px; 
-        font-weight: bold; 
-        font-size: 14px;
-    }
-    
-    QPushButton:hover { background-color: #a1c1fa; }
-
-    /* Secondary transparent button */
-    QPushButton#SecondaryBtn { 
-        background-color: transparent; 
-        color: #bdc1c6; 
-        border: 1px solid #5f6368; 
-    }
-    QPushButton#SecondaryBtn:hover { 
-        background-color: rgba(255, 255, 255, 0.1); 
-        color: white; 
-    }
-"""
-
-DROPZONE_STYLE = """
-    QLabel#DropZone { 
-        border: 2px dashed #5f6368; 
-        background-color: rgba(32, 33, 36, 150); 
-        color: #bdc1c6; 
-        border-radius: 12px; 
-        font-size: 16px; 
-    }
-    QLabel#DropZone:hover { 
-        border-color: #8ab4f8; 
-        background-color: rgba(48, 49, 52, 200); 
-        color: #e8eaed;
-    }
-"""
-
-CARD_STYLE = """
-    QFrame#ActionCard { 
-        background-color: #303134; 
-        border: 1px solid #3c4043; 
-        border-radius: 12px; 
-    }
-    QFrame#ActionCard:hover { 
-        background-color: #3c4043; 
-        border-color: #5f6368; 
-        cursor: pointer;
-    }
-"""
-
-PROGRESS_BAR_STYLE = """
-    QProgressBar { 
-        border: none; 
-        background-color: #3c4043; 
-        height: 8px; 
-        border-radius: 4px; 
-    }
-    QProgressBar::chunk { 
-        background-color: #a8c7fa; 
-        border-radius: 4px; 
-    }
-"""
-
-DASHBOARD_STYLE = """
-    QMainWindow { background-color: #202124; }
-    QScrollArea { background-color: transparent; border: none; }
-    QWidget { background-color: transparent; }
-"""
-
-SECTION_TITLE_STYLE = """
-    font-size: 22px; 
-    color: #e8eaed; 
-    font-weight: 500;
-    margin-top: 20px;
-    margin-bottom: 10px;
-"""
-
-# Cleaned up Card Styles (Removed cursor property to avoid parsing errors)
-NOTEBOOK_CARD_STYLE = """
-    QFrame#NotebookCard {
+# Global Stylesheet
+GLOBAL_STYLE = f"""
+    QMainWindow {{ background: transparent; }}
+    QWidget {{ font-family: 'Segoe UI', sans-serif; }}
+    QMenu {{
         background-color: #303134;
-        border: 1px solid #5f6368;
-        border-radius: 16px;
-    }
-    QFrame#NotebookCard:hover {
+        border: 1px solid {BORDER_COLOR};
+        padding: 5px;
+        color: {TEXT_PRIMARY};
+    }}
+    QMenu::item {{
+        padding: 8px 20px;
+        border-radius: 4px;
+    }}
+    QMenu::item:selected {{
         background-color: #3c4043;
-        border-color: #a8c7fa;
-    }
+    }}
 """
 
-NEW_NOTEBOOK_CARD_STYLE = """
-    QFrame#NewNotebookCard {
-        background-color: #202124;
-        border: 2px solid #5f6368;
-        border-radius: 16px;
-    }
-    QFrame#NewNotebookCard:hover {
-        background-color: #303134;
-        border-color: #8ab4f8;
-    }
+DASHBOARD_STYLE = f"""
+    QMainWindow {{ background-color: transparent; }}
+    QWidget#CentralWidget {{ background-color: {BG_DARK}; border-radius: 0px; }}
+    QScrollArea {{ background: transparent; border: none; }}
+    QScrollBar:vertical {{
+        border: none; background: #202124; width: 10px; margin: 0px;
+    }}
+    QScrollBar::handle:vertical {{
+        background: #5f6368; min-height: 20px; border-radius: 5px;
+    }}
 """
 
-CARD_TITLE_STYLE = "font-weight: bold; font-size: 16px; color: #e8eaed; border: none; background: transparent;"
-CARD_SUBTITLE_STYLE = "color: #bdc1c6; font-size: 12px; border: none; background: transparent;"
+NOTEBOOK_CARD_STYLE = f"""
+    QFrame#NotebookCard {{
+        background-color: {BG_PANEL};
+        border: 1px solid {BORDER_COLOR};
+        border-radius: 12px;
+    }}
+    QFrame#NotebookCard:hover {{
+        background-color: rgba(60, 64, 67, 200);
+        border-color: {ACCENT_BLUE};
+    }}
+"""
 
-CARD_TITLE_STYLE = "font-weight: bold; font-size: 16px; color: #e8eaed; border: none; background: transparent;"
-CARD_SUBTITLE_STYLE = "color: #bdc1c6; font-size: 12px; border: none; background: transparent;"
+NEW_NOTEBOOK_CARD_STYLE = f"""
+    QFrame#NewNotebookCard {{
+        background-color: transparent;
+        border: 2px dashed {BORDER_COLOR};
+        border-radius: 12px;
+    }}
+    QFrame#NewNotebookCard:hover {{
+        border-color: {ACCENT_BLUE};
+        background-color: rgba(168, 199, 250, 0.1);
+    }}
+"""
+
+SECTION_TITLE_STYLE = f"font-size: 20px; color: {TEXT_PRIMARY}; font-weight: 600; margin-top: 15px;"
+CARD_TITLE_STYLE = f"font-weight: 600; font-size: 15px; color: {TEXT_PRIMARY}; border: none; background: transparent;"
+CARD_SUBTITLE_STYLE = f"color: {TEXT_SECONDARY}; font-size: 12px; border: none; background: transparent;"
+
+PROGRESS_BAR_STYLE = f"""
+    QProgressBar {{
+        border: none;
+        background-color: #3c4043;
+        height: 6px;
+        border-radius: 3px;
+    }}
+    QProgressBar::chunk {{
+        background-color: {ACCENT_BLUE};
+        border-radius: 3px;
+    }}
+"""
