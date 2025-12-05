@@ -1,21 +1,14 @@
-import sys
-import os
-import random
+import sys, os, random
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
     QLabel, QFrame, QScrollArea, QInputDialog, QMessageBox,
-    QPushButton, QFileDialog, QMenu, QSizePolicy
+    QPushButton, QFileDialog, QMenu, QGraphicsDropShadowEffect
 )
-from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QPoint
-from PyQt6.QtGui import QCursor, QAction
+from PyQt6.QtCore import Qt, pyqtSignal, QTimer
+from PyQt6.QtGui import QCursor, QAction, QColor
 
-# Import the new FlowLayout
 from frontend.flow_layout import FlowLayout 
-
-try:
-    from frontend.styles import *
-except ImportError:
-    from styles import *
+from frontend.styles import *
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'RAG')))
 try:
@@ -30,10 +23,17 @@ class NotebookCard(QFrame):
     def __init__(self, title, subtitle, is_new=False, emoji="📁"):
         super().__init__()
         self.title = title
-        # Fixed size ensures they flow correctly
-        self.setFixedSize(260, 170) 
+        self.setFixedSize(260, 160)
         self.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
         
+        # Add Drop Shadow for depth
+        shadow = QGraphicsDropShadowEffect(self)
+        shadow.setBlurRadius(20)
+        shadow.setXOffset(0)
+        shadow.setYOffset(4)
+        shadow.setColor(QColor(0, 0, 0, 80))
+        self.setGraphicsEffect(shadow)
+
         if is_new:
             self.setObjectName("NewNotebookCard")
             self.setStyleSheet(NEW_NOTEBOOK_CARD_STYLE)
@@ -42,15 +42,14 @@ class NotebookCard(QFrame):
             self.setStyleSheet(NOTEBOOK_CARD_STYLE)
             
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setContentsMargins(24, 24, 24, 24)
         
         icon_lbl = QLabel("➕" if is_new else emoji)
-        icon_lbl.setStyleSheet("font-size: 28px; background: transparent; border: none;")
+        icon_lbl.setStyleSheet("font-size: 32px; background: transparent; border: none;")
         
         title_lbl = QLabel(title)
         title_lbl.setStyleSheet(CARD_TITLE_STYLE)
         title_lbl.setWordWrap(True)
-        title_lbl.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         
         sub_lbl = QLabel(subtitle)
         sub_lbl.setStyleSheet(CARD_SUBTITLE_STYLE)
@@ -62,7 +61,7 @@ class NotebookCard(QFrame):
             layout.addStretch()
         else:
             layout.addWidget(icon_lbl)
-            layout.addSpacing(10)
+            layout.addSpacing(12)
             layout.addWidget(title_lbl)
             layout.addWidget(sub_lbl)
             layout.addStretch()
@@ -75,17 +74,14 @@ class NotebookCard(QFrame):
 
     def show_context_menu(self, pos):
         menu = QMenu()
-        rename_action = QAction("Rename", self)
-        delete_action = QAction("Delete", self)
-        menu.addAction(rename_action)
+        menu.addAction(QAction("Rename", self))
         menu.addSeparator()
-        menu.addAction(delete_action)
+        menu.addAction(QAction("Delete", self))
         
         action = menu.exec(pos)
-        if action == rename_action:
-            self.action_triggered.emit("rename", self.title)
-        elif action == delete_action:
-            self.action_triggered.emit("delete", self.title)
+        if action:
+            act_str = "rename" if action.text() == "Rename" else "delete"
+            self.action_triggered.emit(act_str, self.title)
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -93,24 +89,24 @@ class MainWindow(QMainWindow):
         self.backend = DocumentLoader()
         
         self.setWindowTitle("OpenbookLM")
-        self.resize(1200, 850)
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-        self.setStyleSheet(GLOBAL_STYLE + DASHBOARD_STYLE)
+        self.resize(1280, 850)
+        # Background Gradient applied here
+        self.setStyleSheet(GLOBAL_STYLE + f"QMainWindow {{ background: {BG_GRADIENT}; }}")
         
         self.init_ui()
         QTimer.singleShot(100, self.check_initial_setup)
 
     def init_ui(self):
         central = QWidget()
-        central.setObjectName("CentralWidget")
         self.setCentralWidget(central)
         
+        # Top-level layout
         outer_layout = QVBoxLayout(central)
         outer_layout.setContentsMargins(0, 0, 0, 0)
         
+        # Scroll Area
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
-        # Fix scroll behavior
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         outer_layout.addWidget(scroll)
         
@@ -118,20 +114,17 @@ class MainWindow(QMainWindow):
         scroll.setWidget(content_widget)
         
         self.main_layout = QVBoxLayout(content_widget)
-        self.main_layout.setContentsMargins(60, 40, 60, 40)
-        self.main_layout.setSpacing(30)
+        self.main_layout.setContentsMargins(80, 50, 80, 50)
+        self.main_layout.setSpacing(40)
         
-        # Header
+        # --- HEADER ---
         header = QHBoxLayout()
         logo = QLabel("OpenbookLM")
-        logo.setStyleSheet("font-size: 26px; font-weight: bold; color: #e8eaed;")
+        logo.setStyleSheet("font-size: 28px; font-weight: 800; color: #FFFFFF; letter-spacing: -0.5px;")
         
-        self.create_btn = QPushButton("➕ Create new")
+        self.create_btn = QPushButton("+ New Openbook")
         self.create_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
-        self.create_btn.setFixedSize(140, 40)
-        self.create_btn.setStyleSheet("""
-            background-color: #e8eaed; color: #202124; border-radius: 20px; font-weight: 600;
-        """)
+        self.create_btn.setStyleSheet(BTN_PRIMARY_STYLE)
         self.create_btn.clicked.connect(self.prompt_create_notebook)
         
         header.addWidget(logo)
@@ -139,13 +132,11 @@ class MainWindow(QMainWindow):
         header.addWidget(self.create_btn)
         self.main_layout.addLayout(header)
 
-        # Recent Section
-        self.add_section_title("Recent Openbooks")
+        # --- SECTIONS ---
+        self.add_section_title("Recent Projects")
         
-        # --- RESPONSIVE LAYOUT ---
-        # Instead of a Grid, we use a plain widget with our FlowLayout
         self.recent_container = QWidget()
-        self.recent_layout = FlowLayout(self.recent_container, margin=0, spacing=20)
+        self.recent_layout = FlowLayout(self.recent_container, margin=0, spacing=24)
         self.main_layout.addWidget(self.recent_container)
         
         self.main_layout.addStretch()
@@ -155,6 +146,10 @@ class MainWindow(QMainWindow):
         lbl.setStyleSheet(SECTION_TITLE_STYLE)
         self.main_layout.addWidget(lbl)
 
+    # ... (Backend logic: check_initial_setup, load_notebooks, handle_card_action, prompt_create_notebook remain same)
+    # Just copy the Logic methods from the previous answer here.
+    # Be sure to include check_initial_setup, change_root_directory, load_notebooks, handle_card_action, prompt_create_notebook, open_notebook
+    
     def check_initial_setup(self):
         if self.backend.base_storage_path and os.path.exists(self.backend.base_storage_path):
             self.load_notebooks()
@@ -168,11 +163,9 @@ class MainWindow(QMainWindow):
             self.load_notebooks()
 
     def load_notebooks(self):
-        # Clear existing items correctly for FlowLayout
         while self.recent_layout.count():
             item = self.recent_layout.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
+            if item.widget(): item.widget().deleteLater()
 
         if not self.backend.base_storage_path: return
 
@@ -184,14 +177,10 @@ class MainWindow(QMainWindow):
             for proj in projects:
                 proj_path = os.path.join(root, proj)
                 file_count = len([f for f in os.listdir(proj_path) if os.path.isfile(os.path.join(proj_path, f))])
-                
                 card = NotebookCard(proj, f"{file_count} sources", emoji=random.choice(emojis))
                 card.clicked.connect(self.open_notebook)
                 card.action_triggered.connect(self.handle_card_action)
-                
-                # Simply add to layout; FlowLayout handles position
-                self.recent_layout.addWidget(card)
-                    
+                self.recent_layout.addWidget(card)    
         except Exception as e:
             print(f"Error: {e}")
 
