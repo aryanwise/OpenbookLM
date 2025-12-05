@@ -49,22 +49,21 @@ class MessageBubble(QWidget):
         self.layout = QHBoxLayout(self)
         self.layout.setContentsMargins(0, 5, 0, 5)
 
-        # The actual text label
         self.label = QLabel(text)
         self.label.setWordWrap(True)
         self.label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         
-        # Font settings
+        # Font settings (High legibility)
         font_size = "16px"
-        line_height = "1.5"
+        line_height = "1.6"
         
         if is_thinking:
             self.label.setStyleSheet(f"color: {TEXT_SUB}; font-style: italic; font-size: 14px; background: transparent;")
             self.layout.addWidget(self.label)
-            self.layout.addStretch() # Push left
+            self.layout.addStretch() 
             
         elif is_user:
-            # USER STYLE: Blue Bubble, Right Aligned
+            # USER: Right Aligned, Compact Blue Bubble
             self.label.setStyleSheet(f"""
                 QLabel {{
                     background-color: {ACCENT_PRIMARY};
@@ -75,14 +74,12 @@ class MessageBubble(QWidget):
                     line-height: {line_height};
                 }}
             """)
-            self.layout.addStretch() # Push Right
+            self.layout.addStretch() # Pushes bubble to the right
             self.layout.addWidget(self.label)
-            # User bubbles should be compact
-            self.label.setMaximumWidth(600) 
+            self.label.setMaximumWidth(650) # Keep user messages readable/compact
             
         else:
-            # AI STYLE: Transparent, Left Aligned, Plain Text
-            # FIX: Increased width to 1100px (approx 85% of panel)
+            # AI: Left Aligned, FULL WIDTH Plain Text
             self.label.setStyleSheet(f"""
                 QLabel {{
                     background-color: transparent;
@@ -92,9 +89,14 @@ class MessageBubble(QWidget):
                     line-height: {line_height};
                 }}
             """)
+            
+            # --- FIX: FULL WIDTH LOGIC ---
+            # 1. We allow the label to expand horizontally to fill space
+            self.label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+            
+            # 2. Add the widget directly. DO NOT addStretch() afterwards.
+            # This ensures it takes all available width in the layout.
             self.layout.addWidget(self.label)
-            self.layout.addStretch() # Push Left
-            self.label.setMaximumWidth(1100)
 
 # --- MAIN WINDOW ---
 class WorkspaceWindow(QMainWindow):
@@ -191,11 +193,11 @@ class WorkspaceWindow(QMainWindow):
         left_layout.addLayout(footer_layout)
         main_layout.addWidget(self.source_panel)
 
-        # --- RIGHT PANEL (THE CHAT) ---
+        # --- RIGHT PANEL (CHAT AREA) ---
         chat_panel = QFrame()
         chat_panel.setStyleSheet("background: transparent; border: none;")
         right_layout = QVBoxLayout(chat_panel)
-        right_layout.setContentsMargins(100, 40, 100, 40)
+        right_layout.setContentsMargins(100, 40, 100, 40) # Margins control total chat width constraints
 
         # Title
         chat_header = QLabel(self.project_name)
@@ -203,27 +205,27 @@ class WorkspaceWindow(QMainWindow):
         chat_header.setStyleSheet(f"color: {TEXT_MAIN}; font-size: 28px; font-weight: 700; margin-bottom: 20px;")
         right_layout.addWidget(chat_header)
 
-        # --- NEW CHAT SCROLL AREA ---
+        # Scroll Area
         self.chat_scroll = QScrollArea()
         self.chat_scroll.setWidgetResizable(True)
         self.chat_scroll.setStyleSheet("background: transparent; border: none;")
         self.chat_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.chat_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         
-        # Container for messages
+        # Chat Messages Container
         self.chat_container = QWidget()
         self.chat_container.setStyleSheet("background: transparent;")
         self.chat_layout = QVBoxLayout(self.chat_container)
-        self.chat_layout.setContentsMargins(10, 10, 10, 10)
+        self.chat_layout.setContentsMargins(10, 10, 20, 10) # Right margin for scrollbar space
         
-        # FIX: Increased Spacing to 30px to separate User and AI messages clearly
-        self.chat_layout.setSpacing(30)
+        # Spacing between User Question and AI Response
+        self.chat_layout.setSpacing(30) 
         self.chat_layout.addStretch() 
         
         self.chat_scroll.setWidget(self.chat_container)
         right_layout.addWidget(self.chat_scroll)
 
-        # Input
+        # Input Area
         input_container = QFrame()
         input_container.setFixedHeight(70)
         input_container.setStyleSheet(f"QFrame {{ background-color: rgba(30, 34, 40, 0.8); border: 1px solid {BORDER_SUBTLE}; border-radius: 35px; }}")
@@ -289,7 +291,7 @@ class WorkspaceWindow(QMainWindow):
         msg = self.chat_input.text().strip()
         if not msg: return
         
-        # 1. Add User Bubble (Right Aligned)
+        # 1. Add User Bubble
         user_bubble = MessageBubble(msg, is_user=True)
         self.chat_layout.insertWidget(self.chat_layout.count()-1, user_bubble)
         self.chat_input.clear()
@@ -310,12 +312,12 @@ class WorkspaceWindow(QMainWindow):
         self.worker.start()
 
     def handle_ai_response(self, response_text):
-        # 1. Remove Thinking Bubble
+        # 1. Remove Thinking
         if self.thinking_bubble:
             self.thinking_bubble.deleteLater()
             self.thinking_bubble = None
         
-        # 2. Add AI Bubble (Left Aligned, Plain)
+        # 2. Add AI Bubble
         ai_bubble = MessageBubble(response_text, is_user=False)
         self.chat_layout.insertWidget(self.chat_layout.count()-1, ai_bubble)
         
