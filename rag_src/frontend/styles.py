@@ -1,81 +1,101 @@
 # frontend/styles.py
 
-# Global Colors
-BG_DARK = "rgba(19, 19, 20, 245)"       # Deep dark, slightly transparent
-BG_PANEL = "rgba(30, 31, 32, 200)"      # Lighter panels
-ACCENT_BLUE = "#a8c7fa"
-TEXT_PRIMARY = "#e8eaed"
-TEXT_SECONDARY = "#bdc1c6"
-BORDER_COLOR = "rgba(95, 99, 104, 150)"
+# --- MODERN THEME PALETTE ---
+BG_GRADIENT = "qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #0F1115, stop:1 #181A20)"
+BG_SOLID = "#0F1115"
+SURFACE_GLASS = "rgba(30, 34, 40, 180)"
+SURFACE_HOVER = "rgba(45, 50, 60, 200)"
+BORDER_SUBTLE = "rgba(255, 255, 255, 0.08)"
+ACCENT_PRIMARY = "#3B82F6"  # Electric Blue
+ACCENT_GLOW = "rgba(59, 130, 246, 0.4)"
+TEXT_MAIN = "#FFFFFF"
+TEXT_SUB = "#94A3B8"
 
-# Global Stylesheet
 GLOBAL_STYLE = f"""
     QMainWindow {{ background: transparent; }}
-    QWidget {{ font-family: 'Segoe UI', sans-serif; }}
-    QMenu {{
-        background-color: #303134;
-        border: 1px solid {BORDER_COLOR};
-        padding: 5px;
-        color: {TEXT_PRIMARY};
-    }}
-    QMenu::item {{
-        padding: 8px 20px;
-        border-radius: 4px;
-    }}
-    QMenu::item:selected {{
-        background-color: #3c4043;
-    }}
-"""
-
-DASHBOARD_STYLE = f"""
-    QMainWindow {{ background-color: transparent; }}
-    QWidget#CentralWidget {{ background-color: {BG_DARK}; border-radius: 0px; }}
-    QScrollArea {{ background: transparent; border: none; }}
+    QWidget {{ font-family: 'Segoe UI', sans-serif; font-size: 14px; color: {TEXT_MAIN}; }}
+    
+    /* Scrollbar Styling - The "Warp" thin look */
     QScrollBar:vertical {{
-        border: none; background: #202124; width: 10px; margin: 0px;
+        border: none; background: transparent; width: 8px; margin: 0px;
     }}
     QScrollBar::handle:vertical {{
-        background: #5f6368; min-height: 20px; border-radius: 5px;
+        background: #334155; min-height: 20px; border-radius: 4px;
+    }}
+    QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0px; }}
+
+    /* Context Menu */
+    QMenu {{
+        background-color: #1E293B;
+        border: 1px solid {BORDER_SUBTLE};
+        border-radius: 8px;
+        padding: 5px;
+    }}
+    QMenu::item {{
+        padding: 6px 20px;
+        border-radius: 4px;
+        color: {TEXT_SUB};
+    }}
+    QMenu::item:selected {{
+        background-color: {ACCENT_PRIMARY};
+        color: white;
     }}
 """
 
+# The "Floating" Card Look
 NOTEBOOK_CARD_STYLE = f"""
     QFrame#NotebookCard {{
-        background-color: {BG_PANEL};
-        border: 1px solid {BORDER_COLOR};
-        border-radius: 12px;
+        background-color: {SURFACE_GLASS};
+        border: 1px solid {BORDER_SUBTLE};
+        border-radius: 16px;
     }}
     QFrame#NotebookCard:hover {{
-        background-color: rgba(60, 64, 67, 200);
-        border-color: {ACCENT_BLUE};
+        background-color: {SURFACE_HOVER};
+        border: 1px solid {ACCENT_PRIMARY};
     }}
 """
 
 NEW_NOTEBOOK_CARD_STYLE = f"""
     QFrame#NewNotebookCard {{
-        background-color: transparent;
-        border: 2px dashed {BORDER_COLOR};
-        border-radius: 12px;
+        background-color: rgba(59, 130, 246, 0.05);
+        border: 1px dashed {ACCENT_PRIMARY};
+        border-radius: 16px;
     }}
     QFrame#NewNotebookCard:hover {{
-        border-color: {ACCENT_BLUE};
-        background-color: rgba(168, 199, 250, 0.1);
+        background-color: rgba(59, 130, 246, 0.15);
     }}
 """
 
-SECTION_TITLE_STYLE = f"font-size: 20px; color: {TEXT_PRIMARY}; font-weight: 600; margin-top: 15px;"
-CARD_TITLE_STYLE = f"font-weight: 600; font-size: 15px; color: {TEXT_PRIMARY}; border: none; background: transparent;"
-CARD_SUBTITLE_STYLE = f"color: {TEXT_SECONDARY}; font-size: 12px; border: none; background: transparent;"
-
-PROGRESS_BAR_STYLE = f"""
-    QProgressBar {{
-        border: none;
-        background-color: #3c4043;
-        height: 6px;
-        border-radius: 3px;
+# Input Fields (Floating Pills)
+INPUT_STYLE = f"""
+    QLineEdit {{
+        background-color: #1E293B;
+        border: 1px solid {BORDER_SUBTLE};
+        border-radius: 8px;
+        padding: 10px 15px;
+        color: white;
+        font-size: 14px;
     }}
-    QProgressBar::chunk {{
-        background-color: {ACCENT_BLUE};
-        border-radius: 3px;
+    QLineEdit:focus {{
+        border: 1px solid {ACCENT_PRIMARY};
+        background-color: #252e40;
     }}
 """
+
+# Buttons (Gradient & Glow)
+BTN_PRIMARY_STYLE = f"""
+    QPushButton {{
+        background-color: {ACCENT_PRIMARY};
+        color: white;
+        border-radius: 8px;
+        font-weight: 600;
+        padding: 8px 16px;
+    }}
+    QPushButton:hover {{
+        background-color: #2563EB;
+    }}
+"""
+
+SECTION_TITLE_STYLE = f"font-size: 18px; color: {TEXT_MAIN}; font-weight: 700; letter-spacing: 0.5px; margin-top: 20px;"
+CARD_TITLE_STYLE = f"font-weight: 600; font-size: 15px; color: {TEXT_MAIN}; border: none; background: transparent;"
+CARD_SUBTITLE_STYLE = f"color: {TEXT_SUB}; font-size: 12px; border: none; background: transparent;"
