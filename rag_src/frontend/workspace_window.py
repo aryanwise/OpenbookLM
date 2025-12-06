@@ -3,7 +3,8 @@ import os
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
     QLabel, QListWidget, QListWidgetItem, QPushButton, 
-    QLineEdit, QFrame, QScrollArea, QSizePolicy, QScrollBar, QProgressBar, QMenu, QMessageBox
+    QLineEdit, QFrame, QScrollArea, QSizePolicy, QScrollBar, 
+    QMessageBox, QMenu, QStackedWidget, QProgressBar
 )
 from PyQt6.QtCore import Qt, QSize, QThread, pyqtSignal, QTimer
 from PyQt6.QtGui import QCursor, QAction
@@ -14,42 +15,35 @@ root_dir = os.path.abspath(os.path.join(current_dir, '..', 'RAG'))
 sys.path.append(root_dir)
 sys.path.append(os.path.abspath(os.path.join(current_dir, '..')))
 
-# --- IMPORTS ---
 try:
     from frontend.styles import *
     from frontend.add_source_dialog import SourceUploadDialog
-    from RAG.rag_pipeline import RAGPipeline # <--- The new brain
+    from RAG.rag_pipeline import RAGPipeline 
 except ImportError as e:
     print(f"Import Error: {e}")
 
-# --- WORKER 1: SYNC FILES (Background Indexing) ---
-class SyncWorker(QThread):
-    finished_sync = pyqtSignal(str) # Emits status message
-
-    def __init__(self, pipeline):
+# --- WORKERS ---
+class InitWorker(QThread):
+    finished_init = pyqtSignal(object) 
+    def __init__(self, project_path):
         super().__init__()
-        self.pipeline = pipeline
-
+        self.project_path = project_path
     def run(self):
-        # This takes time (embedding PDFs), so we run it here
-        status = self.pipeline.sync_project_files()
-        self.finished_sync.emit(status)
+        rag = RAGPipeline(self.project_path)
+        rag.sync_project_files()
+        self.finished_init.emit(rag)
 
-# --- WORKER 2: RAG CHAT (Background Generation) ---
 class RAGWorker(QThread):
     response_received = pyqtSignal(str) 
-
     def __init__(self, query, pipeline):
         super().__init__()
         self.query = query
         self.pipeline = pipeline
-
     def run(self):
-        # This takes time (LLM Inference), so we run it here
         response = self.pipeline.answer_query(self.query)
         self.response_received.emit(response)
 
-# --- CHAT BUBBLE WIDGET (Same as before) ---
+# --- CHAT BUBBLE ---
 class MessageBubble(QWidget):
     def __init__(self, text, is_user=False, is_thinking=False):
         super().__init__()
@@ -76,26 +70,48 @@ class MessageBubble(QWidget):
             self.label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
             self.layout.addWidget(self.label)
 
+# --- LOADING SCREEN WIDGET ---
+class LoadingScreen(QWidget):
+    def __init__(self):
+        super().__init__()
+        layout = QVBoxLayout(self)
+        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        
+        # Icon or Text
+        title = QLabel("Initializing Knowledge Base")
+        title.setStyleSheet(f"color: {TEXT_MAIN}; font-size: 20px; font-weight: bold; margin-bottom: 15px;")
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        
+        # Bar
+        self.pbar = QProgressBar()
+        self.pbar.setFixedSize(400, 6)
+        self.pbar.setRange(0, 0) # Infinite loading animation
+        self.pbar.setStyleSheet(f"""
+            QProgressBar {{ border: none; background-color: #334155; border-radius: 3px; }}
+            QProgressBar::chunk {{ background-color: {ACCENT_PRIMARY}; border-radius: 3px; }}
+        """)
+        
+        sub = QLabel("Syncing sources and building index...")
+        sub.setStyleSheet(f"color: {TEXT_SUB}; font-size: 14px; margin-top: 10px;")
+        sub.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        layout.addWidget(title)
+        layout.addWidget(self.pbar)
+        layout.addWidget(sub)
+
+
 # --- MAIN WINDOW ---
 class WorkspaceWindow(QMainWindow):
     def __init__(self, project_name, backend_instance):
         super().__init__()
         self.project_name = project_name
-        self.backend = backend_instance # This is DocumentManager
-        
-        # 1. Initialize RAG Engine
-        # We assume the project path is set in the backend manager
-        if self.backend.current_project_path:
-            self.rag = RAGPipeline(self.backend.current_project_path)
-        else:
-            print("Error: No project path found")
-            self.rag = None
-
+        self.backend = backend_instance 
+        self.rag = None 
         self.thinking_bubble = None 
+        
         self.setWindowTitle(f"{project_name}")
         self.resize(1400, 950)
         
-        # Apply Theme
         self.setStyleSheet(GLOBAL_STYLE + f"""
             QMainWindow {{ background: {BG_GRADIENT}; }}
             QFrame#LeftPanel {{ background-color: rgba(15, 17, 21, 0.6); border-right: 1px solid {BORDER_SUBTLE}; }}
@@ -106,11 +122,7 @@ class WorkspaceWindow(QMainWindow):
         """)
 
         self.init_ui()
-        
-        # 2. Start Background Sync (Don't freeze UI!)
-        if self.rag:
-            self.start_sync()
-            self.load_chat_history()
+        self.start_engine_init()
 
     def init_ui(self):
         central = QWidget()
@@ -142,7 +154,7 @@ class WorkspaceWindow(QMainWindow):
         top_header.addStretch()
         left_layout.addLayout(top_header)
 
-        # Add Btn
+        # Add Source Btn
         self.add_btn = QPushButton("  + Add Source")
         self.add_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
         self.add_btn.setFixedHeight(40)
@@ -170,18 +182,32 @@ class WorkspaceWindow(QMainWindow):
         left_layout.addLayout(footer_layout)
         main_layout.addWidget(self.source_panel)
 
-        # --- RIGHT PANEL ---
-        chat_panel = QFrame()
-        chat_panel.setStyleSheet("background: transparent; border: none;")
-        right_layout = QVBoxLayout(chat_panel)
-        right_layout.setContentsMargins(100, 40, 100, 40)
+        # --- RIGHT PANEL (STACKED: LOADING vs CHAT) ---
+        right_container = QFrame()
+        right_container.setStyleSheet("background: transparent; border: none;")
+        right_layout = QVBoxLayout(right_container)
+        right_layout.setContentsMargins(0, 0, 0, 0)
+        
+        # The Stack
+        self.stack = QStackedWidget()
+        right_layout.addWidget(self.stack)
 
+        # SCREEN 1: Loading
+        self.loading_screen = LoadingScreen()
+        self.stack.addWidget(self.loading_screen)
+
+        # SCREEN 2: Chat Interface
+        self.chat_interface = QWidget()
+        chat_layout_main = QVBoxLayout(self.chat_interface)
+        chat_layout_main.setContentsMargins(100, 40, 100, 40)
+
+        # Chat Header
         chat_header = QLabel(self.project_name)
         chat_header.setAlignment(Qt.AlignmentFlag.AlignCenter)
         chat_header.setStyleSheet(f"color: {TEXT_MAIN}; font-size: 28px; font-weight: 700; margin-bottom: 20px;")
-        right_layout.addWidget(chat_header)
+        chat_layout_main.addWidget(chat_header)
 
-        # Scroll Area
+        # Chat Scroll
         self.chat_scroll = QScrollArea()
         self.chat_scroll.setWidgetResizable(True)
         self.chat_scroll.setStyleSheet("background: transparent; border: none;")
@@ -194,11 +220,10 @@ class WorkspaceWindow(QMainWindow):
         self.chat_layout.setContentsMargins(10, 10, 20, 10)
         self.chat_layout.setSpacing(30)
         self.chat_layout.addStretch() 
-        
         self.chat_scroll.setWidget(self.chat_container)
-        right_layout.addWidget(self.chat_scroll)
+        chat_layout_main.addWidget(self.chat_scroll)
 
-        # Input
+        # Input Area
         input_container = QFrame()
         input_container.setFixedHeight(70)
         input_container.setStyleSheet(f"QFrame {{ background-color: rgba(30, 34, 40, 0.8); border: 1px solid {BORDER_SUBTLE}; border-radius: 35px; }}")
@@ -218,74 +243,84 @@ class WorkspaceWindow(QMainWindow):
 
         input_layout.addWidget(self.chat_input)
         input_layout.addWidget(self.send_btn)
-        right_layout.addWidget(input_container)
-        main_layout.addWidget(chat_panel)
+        chat_layout_main.addWidget(input_container)
+
+        self.stack.addWidget(self.chat_interface)
+        main_layout.addWidget(right_container)
+
+        # Start on Loading Screen
+        self.stack.setCurrentIndex(0)
 
     # --- LOGIC ---
 
-    def start_sync(self):
-        """Starts the background file indexer."""
-        self.refresh_sources_list()
-        self.limit_lbl.setText("Syncing files...")
-        
-        self.sync_worker = SyncWorker(self.rag)
-        self.sync_worker.finished_sync.connect(self.on_sync_complete)
-        self.sync_worker.start()
+    def start_engine_init(self):
+        if not self.backend.current_project_path: return
+        self.init_worker = InitWorker(self.backend.current_project_path)
+        self.init_worker.finished_init.connect(self.on_engine_ready)
+        self.init_worker.start()
 
-    def on_sync_complete(self, status):
+    def on_engine_ready(self, rag_instance):
+        self.rag = rag_instance
         self.refresh_sources_list()
-        print(f"[SYNC] {status}")
-
-    def load_chat_history(self):
-        """Loads previous messages from SQLite."""
-        history = self.rag.get_history()
-        # Remove the stretch item temporarily
-        stretch = self.chat_layout.takeAt(self.chat_layout.count()-1)
-        
-        for msg in history:
-            role = msg['role']
-            content = msg['content']
-            is_user = (role == "user")
-            bubble = MessageBubble(content, is_user=is_user)
-            self.chat_layout.addWidget(bubble)
-            
-        # Add stretch back
-        self.chat_layout.addItem(stretch)
-        self.scroll_to_bottom()
+        self.load_chat_history()
+        # Switch to Chat Screen
+        self.stack.setCurrentIndex(1)
+        self.chat_input.setFocus()
 
     def refresh_sources_list(self):
         self.source_list.clear()
         files = self.backend.get_project_files()
-        for f in files:
+        # Filter hidden
+        visible_files = [f for f in files if f != "project_dependency" and not f.startswith(".")]
+        
+        for f in visible_files:
             icon = "📄"
             if f.endswith(".pdf"): icon = "📕"
             elif f.endswith(".txt"): icon = "📝"
             item = QListWidgetItem(f"{icon}  {f}")
             item.setData(Qt.ItemDataRole.UserRole, f)
             self.source_list.addItem(item)
-        count = len(files)
+            
+        count = len(visible_files)
         self.limit_bar.setValue(count)
         self.limit_lbl.setText(f"Source limit ({count}/50)")
+
+    def open_add_dialog(self):
+        self.dialog = SourceUploadDialog(self.backend, self)
+        self.dialog.sources_added.connect(self.trigger_resync)
+        self.dialog.exec()
+
+    def trigger_resync(self):
+        self.refresh_sources_list()
+        # Re-run sync to index new files
+        self.init_worker.start()
+
+    def load_chat_history(self):
+        if not self.rag: return
+        history = self.rag.get_history()
+        stretch = self.chat_layout.takeAt(self.chat_layout.count()-1)
+        for msg in history:
+            role = msg['role']
+            content = msg['content']
+            is_user = (role == "user")
+            bubble = MessageBubble(content, is_user=is_user)
+            self.chat_layout.addWidget(bubble)
+        self.chat_layout.addItem(stretch)
+        self.scroll_to_bottom()
 
     def send_message(self):
         msg = self.chat_input.text().strip()
         if not msg: return
         
-        # Add User Bubble
         user_bubble = MessageBubble(msg, is_user=True)
         self.chat_layout.insertWidget(self.chat_layout.count()-1, user_bubble)
         self.chat_input.clear()
         
-        # Add Thinking Bubble
         self.thinking_bubble = MessageBubble("Ollama is thinking...", is_thinking=True)
         self.chat_layout.insertWidget(self.chat_layout.count()-1, self.thinking_bubble)
         self.scroll_to_bottom()
-
-        # Disable Input
+        
         self.chat_input.setDisabled(True)
-        self.send_btn.setDisabled(True)
-
-        # Start RAG Worker
         self.worker = RAGWorker(msg, self.rag)
         self.worker.response_received.connect(self.handle_ai_response)
         self.worker.start()
@@ -299,7 +334,6 @@ class WorkspaceWindow(QMainWindow):
         self.chat_layout.insertWidget(self.chat_layout.count()-1, ai_bubble)
         
         self.chat_input.setDisabled(False)
-        self.send_btn.setDisabled(False)
         self.chat_input.setFocus()
         self.scroll_to_bottom()
 
@@ -307,8 +341,7 @@ class WorkspaceWindow(QMainWindow):
         QTimer.singleShot(100, lambda: self.chat_scroll.verticalScrollBar().setValue(
             self.chat_scroll.verticalScrollBar().maximum()
         ))
-
-    # --- Standard UI Methods (Same as before) ---
+    
     def show_source_context_menu(self, pos):
         item = self.source_list.itemAt(pos)
         if not item: return
@@ -320,12 +353,6 @@ class WorkspaceWindow(QMainWindow):
             if QMessageBox.question(self, "Delete", f"Remove {filename}?") == QMessageBox.StandardButton.Yes:
                 self.backend.delete_source_file(filename)
                 self.refresh_sources_list()
-
-    def open_add_dialog(self):
-        self.dialog = SourceUploadDialog(self.backend, self)
-        # When dialog closes, trigger sync again to index new files
-        self.dialog.sources_added.connect(self.start_sync)
-        self.dialog.exec()
 
     def go_back(self):
         from frontend.main_window import MainWindow
