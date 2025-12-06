@@ -3,25 +3,95 @@ import os
 from PyQt6.QtWidgets import (
     QDialog, QWidget, QVBoxLayout, QHBoxLayout, 
     QLabel, QLineEdit, QPushButton, QFileDialog, QFrame, 
-    QMessageBox, QTextEdit, QProgressBar
+    QMessageBox, QTextEdit
 )
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QCursor
 
 # --- 1. SETUP PATHS ---
 current_dir = os.path.dirname(os.path.abspath(__file__))
-# Add parent dir (rag_src) to path to find data_loader.py
 sys.path.append(os.path.abspath(os.path.join(current_dir, '..')))
 
 # --- 2. IMPORTS ---
 try:
-    # We import these for type hinting or if we need specific static methods,
-    # though we primarily use the 'backend_instance' passed to the class.
     from data_loader import DocumentLoader
-except ImportError as e:
-    print(f"[WARNING] Could not import DocumentLoader: {e}")
+except ImportError:
+    pass
 
-# --- HELPER WIDGETS ---
+# --- CUSTOM WIDGETS ---
+
+class DropZone(QLabel):
+    """
+    A specific widget that handles Drag & Drop reliably.
+    """
+    files_dropped = pyqtSignal(list)
+
+    def __init__(self):
+        super().__init__()
+        self.setText("⬆\n\nUpload sources\nDrag & drop or choose file to upload")
+        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.setFixedHeight(220)
+        self.setAcceptDrops(True) # CRITICAL: This widget accepts drops
+        self.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+        
+        # Default Style
+        self.default_style = """
+            QLabel { 
+                border: 2px dashed #5f6368; 
+                background-color: rgba(32, 33, 36, 150); 
+                border-radius: 12px; 
+                color: #e8eaed; font-size: 15px; font-weight: bold;
+            }
+            QLabel:hover { 
+                border-color: #8ab4f8; 
+                background-color: rgba(48, 49, 52, 200); 
+            }
+        """
+        # Active Drag Style
+        self.drag_style = """
+            QLabel { 
+                border: 2px dashed #8ab4f8; 
+                background-color: rgba(59, 130, 246, 0.2); 
+                border-radius: 12px; 
+                color: #ffffff; font-size: 15px; font-weight: bold;
+            }
+        """
+        self.setStyleSheet(self.default_style)
+
+    def dragEnterEvent(self, event):
+        if event.mimeData().hasUrls():
+            self.setStyleSheet(self.drag_style)
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dragLeaveEvent(self, event):
+        self.setStyleSheet(self.default_style)
+        event.accept()
+
+    def dropEvent(self, event):
+        self.setStyleSheet(self.default_style)
+        if event.mimeData().hasUrls():
+            files = []
+            for url in event.mimeData().urls():
+                if url.isLocalFile():
+                    files.append(url.toLocalFile())
+            
+            if files:
+                self.files_dropped.emit(files)
+                event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            # Trigger file dialog via parent or signal
+            # For simplicity, we can let the parent handle the click if needed,
+            # but usually the drop zone itself handles the click signal.
+            # We will rely on the parent connecting the click logic manually if not dragging.
+            super().mousePressEvent(event)
+
+
 class SourceChip(QPushButton):
     def __init__(self, icon, text, callback):
         super().__init__()
@@ -135,10 +205,9 @@ class SourceUploadDialog(QDialog):
         self.setStyleSheet("""
             QDialog { background-color: #1e1f20; }
             QLabel { color: #bdc1c6; font-size: 13px; }
-            QProgressBar { border: none; background: #3c4043; height: 6px; border-radius: 3px; } 
-            QProgressBar::chunk { background: #a8c7fa; border-radius: 3px; }
         """)
-        self.setAcceptDrops(True)
+        # We don't rely on the Dialog accepting drops anymore, 
+        # the DropZone widget handles it.
         self.init_ui()
 
     def init_ui(self):
@@ -153,24 +222,15 @@ class SourceUploadDialog(QDialog):
         
         main_layout.addWidget(QLabel("Sources let NotebookLM base its responses on information that matters most to you."))
 
-        # Drop Zone
-        self.drop_zone = QLabel("⬆\n\nUpload sources\nDrag & drop or choose file to upload")
-        self.drop_zone.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.drop_zone.setObjectName("DropZone")
-        self.drop_zone.setFixedHeight(220)
-        self.drop_zone.setStyleSheet("""
-            QLabel#DropZone { 
-                border: 2px dashed #5f6368; 
-                background-color: rgba(32, 33, 36, 150); 
-                border-radius: 12px; 
-                color: #e8eaed; font-size: 15px; font-weight: bold;
-            }
-            QLabel#DropZone:hover { 
-                border-color: #8ab4f8; 
-                background-color: rgba(48, 49, 52, 200); 
-            }
-        """)
-        self.drop_zone.mousePressEvent = lambda e: self.open_file_dialog()
+        # Drop Zone (Using the custom class)
+        self.drop_zone = DropZone()
+        self.drop_zone.files_dropped.connect(self.handle_dropped_files)
+        
+        # Make the whole box clickable for file dialog too
+        # We override mousePress in the class, or we can just map the signal here if we added one.
+        # Simple hack: Reuse mousePressEvent of the widget
+        self.drop_zone.mousePressEvent = self.handle_click_dropzone
+        
         main_layout.addWidget(self.drop_zone)
 
         # Groups
@@ -191,37 +251,17 @@ class SourceUploadDialog(QDialog):
         main_layout.addLayout(grid_layout)
         main_layout.addStretch()
 
-    # --- DRAG AND DROP EVENTS ---
-    def dragEnterEvent(self, event):
-        if event.mimeData().hasUrls():
-            event.accept()
-        else:
-            event.ignore()
+    # --- HANDLERS ---
 
-    def dragMoveEvent(self, event):
-        if event.mimeData().hasUrls():
-            event.accept()
-        else:
-            event.ignore()
+    def handle_click_dropzone(self, event):
+        # Trigger standard file dialog
+        self.open_file_dialog()
 
-    def dropEvent(self, event):
-        if event.mimeData().hasUrls():
-            event.setDropAction(Qt.DropAction.CopyAction)
-            event.accept()
-            
-            files = []
-            for url in event.mimeData().urls():
-                if url.isLocalFile():
-                    files.append(url.toLocalFile())
-            
-            if files:
-                self.backend.add_files_to_project(files)
-                self.sources_added.emit()
-                QMessageBox.information(self, "Success", f"Added {len(files)} files.")
-        else:
-            event.ignore()
-
-    # --- ACTION HANDLERS ---
+    def handle_dropped_files(self, files):
+        if files:
+            self.backend.add_files_to_project(files)
+            self.sources_added.emit()
+            QMessageBox.information(self, "Success", f"Added {len(files)} files.")
 
     def open_file_dialog(self):
         files, _ = QFileDialog.getOpenFileNames(self, "Select Files")
@@ -234,7 +274,6 @@ class SourceUploadDialog(QDialog):
         if dlg.exec():
             url = dlg.get_url()
             if url:
-                # Calls 'process_and_save_link' from your DocumentLoader in data_loader.py
                 success = self.backend.process_and_save_link(url)
                 if success:
                     self.sources_added.emit()
@@ -247,7 +286,6 @@ class SourceUploadDialog(QDialog):
         if dlg.exec():
             title, content = dlg.get_data()
             if content:
-                # Calls 'save_text_to_project' from your DocumentLoader
                 if not title: title = "Pasted_Text"
                 success = self.backend.save_text_to_project(content, title)
                 if success:
