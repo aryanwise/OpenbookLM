@@ -7,56 +7,59 @@ from sentence_transformers import SentenceTransformer
 from embedding import EmbeddingPipeline
 
 class FaissVectorStore:
-    def __init__(self, persist_dir: str, embedding_model: str = "all-MiniLM-L6-v2"):
+    def __init__(self, persist_dir: str, embedding_model: str = "all-MiniLM-L6-v2", lazy=False):
         self.persist_dir = persist_dir
         self.embedding_model = embedding_model
         
-        # Paths
         self.faiss_path = os.path.join(self.persist_dir, "faiss.index")
         self.meta_path = os.path.join(self.persist_dir, "metadata.pkl")
         
         self.index = None
-        self.metadata = []  # Stores the actual text chunks
+        self.metadata = []
         self.model = SentenceTransformer(embedding_model)
         
-        # Load existing index if valid, else create new
+        self.is_loaded = False
+        
+        # If NOT lazy, load immediately (old behavior)
+        # If lazy, we wait.
+        if not lazy:
+            self.ensure_index_loaded()
+
+    def ensure_index_loaded(self):
+        """Loads index from disk if not already loaded."""
+        if self.is_loaded:
+            return
+
         if os.path.exists(self.faiss_path) and os.path.exists(self.meta_path):
-            self.load()
+            print(f"[INFO] Loading FAISS index from disk...")
+            self.index = faiss.read_index(self.faiss_path)
+            with open(self.meta_path, "rb") as f:
+                self.metadata = pickle.load(f)
+            print(f"[INFO] Loaded {self.index.ntotal} vectors.")
         else:
-            print(f"[INFO] Initializing new FAISS index at {self.persist_dir}")
-            # Dimension for all-MiniLM-L6-v2 is 384
-            self.index = faiss.IndexFlatL2(384) 
+            print(f"[INFO] Initializing new FAISS index.")
+            self.index = faiss.IndexFlatL2(384)
+            self.metadata = []
+        
+        self.is_loaded = True
 
     def add_documents(self, documents: List[Any]):
-        """
-        Incrementally adds new documents to the existing index.
-        """
-        if not documents:
-            return
+        self.ensure_index_loaded()
+        if not documents: return
 
-        print(f"[INFO] Processing {len(documents)} new documents...")
-        
-        # 1. Chunking
+        print(f"[INFO] Embedding {len(documents)} documents...")
         emb_pipe = EmbeddingPipeline(model_name=self.embedding_model)
         chunks = emb_pipe.chunk_documents(documents)
-        
-        if not chunks:
-            return
+        if not chunks: return
 
-        # 2. Embedding
         embeddings = emb_pipe.embed_chunks(chunks)
-        
-        # 3. Add to Index
         vector_data = np.array(embeddings).astype('float32')
         self.index.add(vector_data)
         
-        # 4. Update Metadata (Keep text linked to vector ID)
-        new_metadatas = [{"text": chunk.page_content, "source": chunk.metadata.get("source", "unknown")} for chunk in chunks]
+        new_metadatas = [{"text": c.page_content, "source": c.metadata.get("source", "unknown")} for c in chunks]
         self.metadata.extend(new_metadatas)
         
-        # 5. Save immediately to persist
         self.save()
-        print(f"[SUCCESS] Added {len(chunks)} chunks. Total vectors: {self.index.ntotal}")
 
     def save(self):
         if not os.path.exists(self.persist_dir):
@@ -65,13 +68,8 @@ class FaissVectorStore:
         with open(self.meta_path, "wb") as f:
             pickle.dump(self.metadata, f)
 
-    def load(self):
-        self.index = faiss.read_index(self.faiss_path)
-        with open(self.meta_path, "rb") as f:
-            self.metadata = pickle.load(f)
-        print(f"[INFO] Loaded {self.index.ntotal} vectors.")
-
     def query(self, query_text: str, top_k: int = 5):
+        self.ensure_index_loaded()
         if not self.index or self.index.ntotal == 0:
             return []
             
@@ -81,8 +79,5 @@ class FaissVectorStore:
         results = []
         for idx, dist in zip(I[0], D[0]):
             if idx < len(self.metadata) and idx >= 0:
-                results.append({
-                    "metadata": self.metadata[idx], 
-                    "distance": float(dist)
-                })
+                results.append({"metadata": self.metadata[idx], "distance": float(dist)})
         return results
