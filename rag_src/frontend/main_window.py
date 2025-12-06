@@ -39,7 +39,7 @@ class NotebookCard(QFrame):
         self.setFixedSize(260, 170) 
         self.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
         
-        # Drop Shadow for depth (The "Floating" look)
+        # Drop Shadow for depth
         shadow = QGraphicsDropShadowEffect(self)
         shadow.setBlurRadius(25)
         shadow.setXOffset(0)
@@ -47,7 +47,7 @@ class NotebookCard(QFrame):
         shadow.setColor(QColor(0, 0, 0, 60))
         self.setGraphicsEffect(shadow)
         
-        # Apply Styles from styles.py
+        # Apply Styles
         if is_new:
             self.setObjectName("NewNotebookCard")
             self.setStyleSheet(NEW_NOTEBOOK_CARD_STYLE)
@@ -114,7 +114,7 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("OpenbookLM")
         self.resize(1280, 850)
         
-        # Apply the Global Gradient Background
+        # Apply Global Gradient
         self.setStyleSheet(GLOBAL_STYLE + f"QMainWindow {{ background: {BG_GRADIENT}; }}")
         
         self.init_ui()
@@ -127,7 +127,7 @@ class MainWindow(QMainWindow):
         outer_layout = QVBoxLayout(central)
         outer_layout.setContentsMargins(0, 0, 0, 0)
         
-        # Scroll Area (Transparent)
+        # Scroll Area
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setStyleSheet("background: transparent; border: none;")
@@ -135,7 +135,7 @@ class MainWindow(QMainWindow):
         outer_layout.addWidget(scroll)
         
         content_widget = QWidget()
-        content_widget.setStyleSheet("background: transparent;") # Important for gradient
+        content_widget.setStyleSheet("background: transparent;")
         scroll.setWidget(content_widget)
         
         self.main_layout = QVBoxLayout(content_widget)
@@ -150,7 +150,6 @@ class MainWindow(QMainWindow):
         
         self.create_btn = QPushButton("+ New Notebook")
         self.create_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
-        # Use the "Electric Blue" button style
         self.create_btn.setStyleSheet(BTN_PRIMARY_STYLE)
         self.create_btn.clicked.connect(self.prompt_create_notebook)
         
@@ -225,7 +224,20 @@ class MainWindow(QMainWindow):
 
             for proj in projects:
                 proj_path = os.path.join(root, proj)
-                file_count = len([f for f in os.listdir(proj_path) if os.path.isfile(os.path.join(proj_path, f))])
+                
+                # --- FIXED COUNTING LOGIC ---
+                # Exclude hidden files (starting with .) and system folders
+                file_count = 0
+                if os.path.exists(proj_path):
+                    all_items = os.listdir(proj_path)
+                    valid_files = [
+                        f for f in all_items 
+                        if os.path.isfile(os.path.join(proj_path, f)) 
+                        and not f.startswith('.') 
+                        and f != "chat_history.json" # Exclude chat history from source count if desired
+                        and f != "project_dependency" # Explicitly exclude if it somehow appears
+                    ]
+                    file_count = len(valid_files)
                 
                 card = NotebookCard(proj, f"{file_count} sources", emoji=random.choice(emojis))
                 card.clicked.connect(self.open_notebook)
