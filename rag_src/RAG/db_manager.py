@@ -11,16 +11,23 @@ class DBManager:
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
-        # Table 1: Track indexed files to prevent re-embedding
+        # Table 1: Track indexed files (Now with mtime)
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS file_registry (
                 filename TEXT PRIMARY KEY,
                 file_hash TEXT,
+                last_modified REAL,
                 indexed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
         
-        # Table 2: Chat History (Better than JSON for appending)
+        # Migration: Add 'last_modified' column if it doesn't exist (for existing users)
+        try:
+            cursor.execute("ALTER TABLE file_registry ADD COLUMN last_modified REAL")
+        except sqlite3.OperationalError:
+            pass # Column already exists
+        
+        # Table 2: Chat History
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS chat_history (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -32,21 +39,22 @@ class DBManager:
         conn.commit()
         conn.close()
 
-    def get_file_hash(self, filename):
+    def get_file_metadata(self, filename):
+        """Returns (hash, last_modified) for a file."""
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
-        cursor.execute("SELECT file_hash FROM file_registry WHERE filename = ?", (filename,))
+        cursor.execute("SELECT file_hash, last_modified FROM file_registry WHERE filename = ?", (filename,))
         result = cursor.fetchone()
         conn.close()
-        return result[0] if result else None
+        return result if result else (None, None)
 
-    def update_file_hash(self, filename, file_hash):
+    def update_file_registry(self, filename, file_hash, mtime):
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         cursor.execute('''
-            INSERT OR REPLACE INTO file_registry (filename, file_hash)
-            VALUES (?, ?)
-        ''', (filename, file_hash))
+            INSERT OR REPLACE INTO file_registry (filename, file_hash, last_modified)
+            VALUES (?, ?, ?)
+        ''', (filename, file_hash, mtime))
         conn.commit()
         conn.close()
 
