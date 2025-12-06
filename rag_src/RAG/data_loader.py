@@ -92,10 +92,24 @@ class DocumentManager:
             return False
 
     def get_project_files(self) -> List[str]:
-        """Returns a list of filenames currently in the project folder."""
+        """Returns visible source files, excluding system files."""
         if not self.current_project_path: return []
-        return [f for f in os.listdir(self.current_project_path) 
-                if os.path.isfile(os.path.join(self.current_project_path, f))]
+        
+        visible_files = []
+        for f in os.listdir(self.current_project_path):
+            full_path = os.path.join(self.current_project_path, f)
+            
+            # 1. Skip Directories (hides project_dependency)
+            if os.path.isdir(full_path):
+                continue
+                
+            # 2. Skip System Files
+            if f.startswith(".") or f == "config.json":
+                continue
+                
+            visible_files.append(f)
+            
+        return visible_files
 
     def delete_project(self, project_name: str):
         if not self.base_storage_path: return
