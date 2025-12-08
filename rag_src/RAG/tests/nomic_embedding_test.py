@@ -6,7 +6,7 @@ import requests
 # API endpoint and payload
 url = "http://localhost:11434/api/embeddings"
 payload = {
-    "model": "nomic-embed-text:latest",
+    "model": "nomic-embed-text",
     "prompt": "The sky is blue because of Rayleigh scattering"
 }
 
